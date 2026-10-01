@@ -14,7 +14,12 @@ ALLOWED_HOSTS = frozenset({
     "openrouter.ai",                       # OpenRouter (":free" models only)
     "mainnet.base.org",                    # Base mainnet public RPC (REAL ETH)
     "sepolia.base.org",                    # Base Sepolia public RPC (testnet)
+    # Read-only public job boards (no account, GET only via get_json)
+    "www.freelancer.com",                  # /api/projects/0.1/projects/active
+    "remotive.com",                        # /api/remote-jobs
 })
+# Hosts that may only be read (GET), never posted to.
+READ_ONLY_HOSTS = frozenset({"www.freelancer.com", "remotive.com"})
 
 # chain_id -> the only RPC host allowed for it.
 CHAIN_RPC_HOSTS = MappingProxyType({
@@ -41,8 +46,19 @@ def check_chain(chain_id: int, rpc_url: str) -> None:
         raise HostNotAllowed(f"chain {chain_id} via {host!r} is not an allowed (chain, RPC) pair")
 
 
+def get_json(url: str, params: dict | None = None, timeout: float = 30.0):
+    check_url(url)
+    import requests
+
+    resp = requests.get(url, params=params or {}, headers={"User-Agent": "sovereign-agent/0.2"}, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def post_json(url: str, payload: dict, headers: dict | None = None, timeout: float = 60.0) -> dict:
     check_url(url)
+    if urlparse(url).hostname in READ_ONLY_HOSTS:
+        raise HostNotAllowed(f"{urlparse(url).hostname} is read-only (no posting/applying/sign-up)")
     import requests  # imported lazily so control/ has no hard dependency
 
     resp = requests.post(url, json=payload, headers=headers or {}, timeout=timeout)

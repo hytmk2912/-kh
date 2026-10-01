@@ -34,6 +34,11 @@ else
 fi
 
 step "9b earning loop (mock)"   python3 scripts/extra_checks.py loop
+step "12 scout real job boards" python3 main.py scout --offline
+step "13 work memory"           python3 main.py memory --top 5
+if [ -f state/agent_keystore.json ]; then
+  step "14 owner payout check (dry run, mainnet)" python3 main.py payout --dry-run
+fi
 step "10 tamper detection"     python3 scripts/extra_checks.py tamper
 step "11 no secrets committed" python3 scripts/extra_checks.py secrets
 

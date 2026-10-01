@@ -39,7 +39,7 @@ def loop():
     inbox.mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "examples/job_translate.json", inbox / "loop-ok.json")
     shutil.copy(ROOT / "examples/job_forbidden.json", inbox / "loop-bad.json")
-    p = run(["main.py", "loop", "--wallet", "mock", "--offline", "--once"])
+    p = run(["main.py", "loop", "--wallet", "mock", "--offline", "--once", "--no-scout"])
     print("\n".join(l for l in p.stdout.splitlines() if "loop" in l or "->" in l))
     assert (ROOT / "state/done/loop-ok.json").exists() and (ROOT / "state/refused/loop-bad.json").exists()
     assert not list(inbox.glob("loop-*.json"))

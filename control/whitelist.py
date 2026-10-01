@@ -11,6 +11,7 @@ ALLOWED_INDUSTRIES = frozenset({
     "food",
     "culture",
     "health_wellness",  # general information only, no medical advice
+    "general",          # scouted gigs that passed agent/scout.py legality filter
 })
 
 

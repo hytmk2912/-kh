@@ -10,6 +10,7 @@ from control import (  # noqa: F401
     kill_switch,
     network,
     paths,
+    payout,
     spend_limit,
     whitelist,
 )

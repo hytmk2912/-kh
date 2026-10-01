@@ -2,8 +2,8 @@
 
 OnchainWallet: reads the real balance of WALLET_ADDRESS on the active Base
 chain (mainnet 8453 or Sepolia 84532) via the public JSON-RPC and verifies
-incoming payments. RECEIVE-ONLY: there is no signing/sending code, so the
-private key is never needed at runtime. Compute costs are virtual debits in
+incoming payments. It never signs; the only outgoing transfer (owner
+payout) lives in agent/signer.py behind control.payout.authorize(). Compute costs are virtual debits in
 state/ (models are free). Chain/RPC pairs outside control.network are refused.
 
 MockWallet: offline JSON wallet, used for demos, tests and iPhone runs.
@@ -14,6 +14,7 @@ import re
 
 from control import guard, network
 from control.paths import STATE_DIR
+from agent import keystore
 from agent.config import eth_to_wei
 
 
@@ -76,9 +77,10 @@ class OnchainWallet:
         self.name = chain["name"]
         self.mainnet = self.chain_id in network.MAINNET_CHAIN_IDS
         self.min_confirmations = int(chain.get("min_confirmations", 1))
-        self.address = os.environ.get("WALLET_ADDRESS", "").strip()
+        # The agent's own wallet (state/agent_keystore.json) wins over WALLET_ADDRESS.
+        self.address = keystore.address() or os.environ.get("WALLET_ADDRESS", "").strip()
         if not ADDRESS_RE.fullmatch(self.address):
-            raise WalletError("WALLET_ADDRESS missing/invalid in .env (0x + 40 hex chars)")
+            raise WalletError("no wallet: run `python3 main.py wallet-init` (or set WALLET_ADDRESS in .env)")
         self.debits_path = STATE_DIR / f"virtual_debits_{self.name}.json"
         self.seen_path = STATE_DIR / f"seen_payments_{self.name}.json"
         self._checked_chain = False

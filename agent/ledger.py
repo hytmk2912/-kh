@@ -23,7 +23,7 @@ class Ledger:
     def record(self, kind: str, amount_wei: int, memo: str) -> dict:
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "kind": kind,  # "spend" | "income"
+            "kind": kind,  # "spend" | "income" | "payout"
             "amount_wei": int(amount_wei),
             "memo": memo,
         }
@@ -36,3 +36,7 @@ class Ledger:
 
     def total(self, kind: str) -> int:
         return sum(e["amount_wei"] for e in self._entries() if e["kind"] == kind)
+
+    def count_today(self, kind: str) -> int:
+        today = datetime.now(timezone.utc).date().isoformat()
+        return sum(1 for e in self._entries() if e["kind"] == kind and e["ts"].startswith(today))

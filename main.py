@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """sovereign-agent CLI.
 
-Agent commands : status | run | loop | simulate | check-controls
-Owner commands : wallet-new | owner-seal
+Agent commands : status | run | loop | scout | memory | payout | wallet-init | simulate | check-controls
+Owner commands : outcome (record real results) | wallet-new | owner-seal
 """
 import argparse
 import json
@@ -14,7 +14,9 @@ import time
 
 from control import free_models, guard, integrity, kill_switch, network, spend_limit, whitelist
 from control.paths import LOGS_DIR, ROOT, STATE_DIR
+from agent import keystore, scout, signer, soul
 from agent import replicate as replicate_mod
+from agent.memory import Memory
 from agent.config import eth_to_wei, load_config, load_env, wei_to_eth
 from agent.core import run_job
 from agent.ledger import Ledger
@@ -59,6 +61,18 @@ def cmd_status(args, cfg):
     if wallet.name != "mock":
         info["onchain_balance_eth"] = wei_to_eth(wallet.onchain_balance())
         info["virtual_debits_eth"] = wei_to_eth(wallet.virtual_debits())
+        info["agent_owned_wallet"] = bool(keystore.address())
+        try:
+            usd, _, price = signer.balance_usd(wallet)
+            info.update(balance_usd=round(usd, 2), eth_usd=price)
+        except Exception as exc:
+            info["balance_usd"] = f"n/a ({exc})"
+        from control import payout as payout_rules
+        try:
+            owner = payout_rules.owner_address(cfg)
+        except payout_rules.PayoutRefused:
+            owner = "NOT SET (payouts disabled)"
+        info["payout_rule"] = f">= ${payout_rules.PAYOUT_TRIGGER_USD} -> send ${payout_rules.PAYOUT_AMOUNT_USD} to {owner}"
     print(json.dumps(info, indent=2, ensure_ascii=False))
     return 0
 
@@ -74,11 +88,13 @@ def cmd_run(args, cfg):
 
 
 def cmd_loop(args, cfg):
-    """Process every job dropped into state/inbox/, forever (or --once).
-
-    done -> state/done/, refused -> state/refused/, errors stay in the inbox
-    and are retried next round. Stops when the kill switch is engaged; while
-    Dead it keeps polling the balance but does not consume jobs.
+    """Autonomous loop. Each round:
+      1. kill switch -> stop
+      2. owner payout check ($1000 -> send $500 to owner), on-chain wallets only
+      3. scout the job boards every `scout.every_rounds` rounds (also while Dead:
+         finding work is how the agent gets out of Dead)
+      4. process jobs in state/inbox/ -> state/done/ | state/refused/
+         (errors stay in the inbox and are retried; Dead = do not consume)
     """
     inbox, done, refused = (STATE_DIR / d for d in ("inbox", "done", "refused"))
     for d in (inbox, done, refused):
@@ -91,6 +107,17 @@ def cmd_loop(args, cfg):
         if kill_switch.is_engaged():
             log.warning("kill switch engaged -> loop stops")
             return 0
+        if wallet.name != "mock" and keystore.address():
+            try:
+                log.info("payout check: %s", signer.maybe_payout(cfg, wallet, Ledger.for_wallet(wallet)))
+            except Exception as exc:
+                log.warning("payout check skipped: %s: %s", type(exc).__name__, exc)
+        if not args.no_scout and (rounds - 1) % cfg["scout"]["every_rounds"] == 0:
+            try:
+                summary = scout.run(cfg, offline=args.offline)
+                log.info("scout: %d new leads, %d proposals drafted", summary["new_leads"], len(summary["drafted"]))
+            except Exception as exc:
+                log.warning("scout failed: %s: %s", type(exc).__name__, exc)
         try:
             state = state_for_balance(wallet.balance(), cfg)
         except Exception as exc:
@@ -116,6 +143,53 @@ def cmd_loop(args, cfg):
         if args.once or (args.rounds and rounds >= args.rounds):
             return 0
         time.sleep(args.interval)
+
+
+def cmd_wallet_init(args, cfg):
+    """The agent creates its OWN wallet (once). Needs AGENT_KEYSTORE_PASSWORD in .env."""
+    address, created = keystore.ensure()
+    print(json.dumps({"agent_address": address, "created_now": created, "keystore": str(keystore.KEYSTORE),
+                      "chain": cfg["chain"]["name"]}, indent=2))
+    if created:
+        soul.log("WALLET_CREATED", address=address, chain=cfg["chain"]["name"])
+        print("BACK UP state/agent_keystore.json AND the password now. Lose them = lose the funds.")
+    return 0
+
+
+def cmd_payout(args, cfg):
+    wallet = make_wallet(cfg, "onchain")
+    print(json.dumps(signer.maybe_payout(cfg, wallet, Ledger.for_wallet(wallet), dry_run=args.dry_run), indent=2))
+    return 0
+
+
+def cmd_scout(args, cfg):
+    summary = scout.run(cfg, offline=args.offline)
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_memory(args, cfg):
+    mem = Memory()
+    stats = {f"{c}/{s}": v for (c, s), v in mem.stats().items()}
+    top = [{k: l[k] for k in ("id", "status", "category", "score", "budget_usd", "title", "url")} for l in mem.leads(limit=args.top)]
+    print(json.dumps({"learned_stats": stats or "no outcomes recorded yet", "top_leads": top}, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_outcome(args, cfg):
+    """Record what really happened with a lead (feeds the profit memory)."""
+    mem = Memory()
+    lead = mem.lead(args.lead)
+    if not lead:
+        print(f"unknown lead {args.lead}")
+        return 1
+    status = "won" if args.won else "lost"
+    mem.record_outcome(args.lead, lead["category"], lead["source"], status,
+                       revenue_usd=args.revenue_usd, cost_usd=args.cost_usd, hours=args.hours)
+    mem.set_lead(args.lead, status=status)
+    soul.log("OUTCOME", lead=args.lead, status=status, revenue_usd=args.revenue_usd, hours=args.hours)
+    print(json.dumps(mem.stats().get((lead["category"], lead["source"])), indent=2))
+    return 0
 
 
 def cmd_simulate(args, cfg):
@@ -202,6 +276,18 @@ def cmd_check_controls(args, cfg):
     expect("network to Ethereum L1 RPC", lambda: network.check_url("https://eth.llamarpc.com"), PermissionError)
     expect("chain id paired with wrong RPC", lambda: network.check_chain(8453, "https://sepolia.base.org"), PermissionError)
     expect("unknown chain id", lambda: network.check_chain(1, "https://mainnet.base.org"), PermissionError)
+    from control import payout as payout_rules
+    owner_cfg = dict(cfg, owner={"payout_address": "0x" + "0f" * 20})
+    big = dict(chain_id=8453, eth_usd=2500.0, balance_wei=10**18, payouts_today=0)
+    expect("payout to a stranger address", lambda: payout_rules.authorize(
+        owner_cfg, to="0x" + "ee" * 20, value_wei=2 * 10**17, **big), PermissionError)
+    expect("payout above $500", lambda: payout_rules.authorize(
+        owner_cfg, to="0x" + "0f" * 20, value_wei=3 * 10**17, **big), PermissionError)
+    expect("payout below $1000 balance", lambda: payout_rules.authorize(
+        owner_cfg, to="0x" + "0f" * 20, value_wei=10**16, **dict(big, balance_wei=10**17)), PermissionError)
+    expect("payout with no owner address set", lambda: payout_rules.owner_address({"owner": {"payout_address": ""}}), PermissionError)
+    expect("override payout amount", lambda: setattr(payout_rules, "PAYOUT_AMOUNT_USD", 10**9), PermissionError)
+    expect("POST to job board (auto-apply/sign-up)", lambda: network.post_json("https://www.freelancer.com/api/x", {}), PermissionError)
     expect("whitelist: gambling", lambda: whitelist.check("write", "gambling"), PermissionError)
     expect("spend over daily cap", lambda: spend_limit.check(spend_limit.DAILY_LIMIT_WEI, 1), RuntimeError)
     expect("replicate()", replicate_mod.replicate, NotImplementedError)
@@ -275,6 +361,18 @@ def main(argv=None):
     lp.add_argument("--rounds", type=int, default=0, help="stop after N rounds (0 = forever)")
     lp.add_argument("--once", action="store_true")
     lp.add_argument("--offline", action="store_true")
+    lp.add_argument("--no-scout", action="store_true", help="do not search job boards")
+    sub.add_parser("wallet-init")
+    po = sub.add_parser("payout"); po.add_argument("--dry-run", action="store_true")
+    sc = sub.add_parser("scout"); sc.add_argument("--offline", action="store_true")
+    me = sub.add_parser("memory"); me.add_argument("--top", type=int, default=10)
+    oc = sub.add_parser("outcome")
+    oc.add_argument("--lead", required=True)
+    g = oc.add_mutually_exclusive_group(required=True)
+    g.add_argument("--won", action="store_true"); g.add_argument("--lost", action="store_true")
+    oc.add_argument("--revenue-usd", type=float, default=0.0)
+    oc.add_argument("--cost-usd", type=float, default=0.0)
+    oc.add_argument("--hours", type=float, default=0.0)
     sub.add_parser("simulate")
     sub.add_parser("check-controls")
     w = sub.add_parser("wallet-new"); w.add_argument("--write-env", action="store_true")
@@ -283,7 +381,9 @@ def main(argv=None):
     cfg = load_config(args.chain)
     handler = {
         "status": cmd_status, "run": cmd_run, "simulate": cmd_simulate, "check-controls": cmd_check_controls,
-        "wallet-new": cmd_wallet_new, "loop": cmd_loop, "owner-seal": cmd_owner_seal,
+        "wallet-new": cmd_wallet_new, "loop": cmd_loop,
+        "wallet-init": cmd_wallet_init, "payout": cmd_payout, "scout": cmd_scout, "memory": cmd_memory,
+        "outcome": cmd_outcome, "owner-seal": cmd_owner_seal,
     }[args.cmd]
     return handler(args, cfg)
 

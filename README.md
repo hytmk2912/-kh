@@ -5,7 +5,7 @@ Nhận job → báo giá bằng ETH → chọn mức tính toán theo số dư v
 ghi kết quả, hoá đơn và nhật ký vào `SOUL.md`.
 
 - Mặc định: **Base mainnet (chain 8453, ETH THẬT)**, theo quyết định của chủ. Chạy testnet: `--chain base_sepolia` hoặc `CHAIN=base_sepolia`.
-- Ví **chỉ nhận tiền**: agent không có code ký/gửi giao dịch, không cần private key khi chạy.
+- Ví do **agent tự tạo**. Khoản chi duy nhất được phép: rút $500 về ví chủ khi ví đạt $1000 (`control/payout.py`).
 
 > ⚠️ Không dùng API trả phí, không tự đăng ký domain/VM/tài khoản. Trên mainnet, chỉ dùng địa chỉ ví bạn tự giữ khoá.
 
@@ -26,9 +26,14 @@ bash scripts/done_check.sh                # toàn bộ kiểm tra Done -> logs/d
 | `python3 main.py [--chain base_mainnet\|base_sepolia] <lệnh>` | — | chọn chain (mặc định theo `active_chain`) |
 | `python3 main.py status [--wallet mock\|onchain]` | agent | số dư, trạng thái, chính sách, hạn mức, integrity |
 | `python3 main.py run --job F.json [--wallet ..] [--payment-tx 0x..] [--offline]` | agent | làm 1 job |
-| `python3 main.py loop [--interval 60] [--max-jobs 5] [--once]` | agent | vòng lặp: xử lý mọi job trong `state/inbox/` |
+| `python3 main.py loop [--interval 60] [--max-jobs 5] [--once] [--no-scout]` | agent | vòng lặp tự vận hành: rút lợi nhuận, tìm việc, xử lý `state/inbox/` |
+| `python3 main.py wallet-init` | agent | agent tự tạo ví của nó (cần `AGENT_KEYSTORE_PASSWORD`) |
+| `python3 main.py scout [--offline]` | agent | tìm việc trên Freelancer/Remotive, xếp hạng, viết đề xuất |
+| `python3 main.py memory` | agent | thống kê lợi nhuận đã học + lead tốt nhất |
+| `python3 main.py payout [--dry-run]` | agent | kiểm tra/thực hiện rút $500 khi ví ≥ $1000 |
+| `python3 main.py outcome --lead ID --won/--lost [--revenue-usd N --hours H]` | **chủ** | ghi kết quả thật để agent học |
 | `python3 main.py simulate` | agent | ví mock đi qua Normal → Low_compute → Critical → Dead + chặn hạn mức |
-| `python3 main.py check-controls` | agent | thử phá 27 luật, tất cả phải bị chặn |
+| `python3 main.py check-controls` | agent | thử phá 33 luật, tất cả phải bị chặn |
 | `python3 main.py wallet-new --write-env` | **chủ** | tạo địa chỉ EVM, key ghi vào `.env` (cần `pip install eth-account`). Mainnet: nên dùng ví riêng của bạn |
 | `python3 main.py owner-seal` | **chủ** | niêm phong lại sau khi chủ sửa `control/`, `config.yaml`, header SOUL |
 
@@ -58,6 +63,34 @@ Mọi model đều qua `control/free_models.check()` — sửa config sang model
    gửi tới ví agent, status=1, value ≥ giá, **đủ 5 block xác nhận**, mỗi tx chỉ dùng 1 lần.
 
 Chi phí compute là trừ ảo (`state/virtual_debits_<chain>.json`) vì model free; agent không bao giờ chuyển tiền đi.
+
+## Chế độ tự vận hành (v3)
+
+```bash
+pip install -r requirements.txt               # cần eth-account cho ví agent
+echo "AGENT_KEYSTORE_PASSWORD=<mật khẩu dài>" >> .env
+python3 main.py wallet-init                    # agent TỰ tạo ví của nó (chỉ 1 lần)
+# chủ: đặt owner.payout_address trong config.yaml rồi `python3 main.py owner-seal`
+python3 main.py loop --interval 60             # chạy mãi: rút lợi nhuận + tìm việc + làm job
+```
+
+| Việc | Agent tự làm | Ghi chú |
+|---|---|---|
+| Tạo & giữ ví | ✅ `wallet-init`, key mã hoá trong `state/agent_keystore.json` | Sao lưu file này + mật khẩu. Mất = mất tiền |
+| Rút lợi nhuận | ✅ ví ≥ $1000 (giá Chainlink ETH/USD) → gửi $500 về `owner.payout_address`, phần còn lại làm vốn | Tối đa 1 lần/ngày; chỉ gửi được tới đúng địa chỉ chủ |
+| Tìm việc trên Internet | ✅ đọc Freelancer + Remotive (API công khai), lọc việc bất hợp pháp/không làm được | Chỉ đọc, không đăng ký tài khoản |
+| Xếp hạng việc lời nhất | ✅ điểm = ngân sách × xác suất thắng ÷ giờ công, có tính số người đang bid | Học từ kết quả thật |
+| Nhớ việc đã làm | ✅ `state/memory.db` (SQLite): lead, đề xuất, kết quả, doanh thu, giờ công | `python3 main.py memory` |
+| Tránh việc lỗ | ✅ nhóm (loại việc, nguồn) có ≥ 5 kết quả mà 0 thắng hoặc lợi nhuận ≤ 0 → tự bỏ qua | |
+| Viết đề xuất | ✅ `output/proposals/*.md` cho 5 lead tốt nhất mỗi lượt | Bài đăng việc được coi là dữ liệu không tin cậy |
+| **Gửi đề xuất / nói chuyện với khách** | ❌ **chủ làm** bằng tài khoản của chủ | Lý do bên dưới |
+| Ghi kết quả | chủ: `python3 main.py outcome --lead freelancer:123 --won --revenue-usd 80 --hours 2` (hoặc `--lost`) | Đây là dữ liệu để agent học |
+
+### Những gì agent cố ý KHÔNG tự làm, và lý do
+
+- **Tiêu tiền tuỳ ý / chuyển tới địa chỉ khác:** agent đọc nội dung lạ trên Internet (bài đăng việc, tin nhắn khách). Nếu nó được gửi tiền tới địa chỉ tuỳ ý, chỉ một bài đăng chứa câu lệnh độc (prompt injection) là có thể rút sạch ví. Vì vậy nơi nhận tiền duy nhất là địa chỉ chủ đặt trong `config.yaml` (được niêm phong); luật nằm trong `control/payout.py`. Agent cũng chưa có khoản chi nào cần tiền vì model đều miễn phí.
+- **Tự đăng ký tài khoản, tự nộp đề xuất, tự nhắn khách lạ:** Freelancer/Upwork/Fiverr cấm tài khoản tự động và yêu cầu xác minh danh tính người thật; gửi tin hàng loạt cho người lạ là spam. Vi phạm sẽ bị khoá tài khoản (của bạn). Agent chỉ đọc API công khai; các host việc làm bị chặn POST ở `control/network.py`.
+- **Tiền từ khách trên Freelancer** được trả bằng tiền pháp định vào tài khoản Freelancer của **chủ**, không vào ví ETH của agent. Ví agent chỉ nhận tiền khi khách trả bằng ETH trên Base, hoặc khi chủ nạp vốn vào ví.
 
 ## Vòng lặp nhận việc
 

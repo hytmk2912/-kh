@@ -1,6 +1,6 @@
 # TASKS — sovereign-agent
 
-v1: chỉ testnet. v2 (chủ duyệt): Base mainnet, ví chỉ nhận tiền, vòng lặp nhận việc.
+v1: chỉ testnet. v2 (chủ duyệt): Base mainnet, vòng lặp nhận việc. v3: ví agent tự tạo, tự rút lợi nhuận, tự tìm việc, bộ nhớ lợi nhuận.
 
 Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của chủ (owner)
 
@@ -24,6 +24,19 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ✅ Ví `mock` offline cho demo/test/iPhone
 - ⬜ Chủ đặt `WALLET_ADDRESS` của ví mình giữ khoá (không dùng địa chỉ tạo trong container tạm)
 - ⬜ Ví phải có ≥ 0.0005 ETH trên Base thì agent mới thoát Dead
+
+## v3 — tự vận hành
+- ✅ `wallet-init`: agent tự tạo ví, key mã hoá (keystore v3) bằng `AGENT_KEYSTORE_PASSWORD`, không bao giờ ghi đè
+- ✅ `control/payout.py`: ví ≥ $1000 → gửi $500 về `owner.payout_address`, tối đa 1 lần/ngày, giá Chainlink ETH/USD (kiểm tra độ cũ + khoảng hợp lý)
+- ✅ `agent/signer.py`: nơi duy nhất ký giao dịch, luôn gọi `authorize()` trước; chờ nếu còn tx pending; test giải mã tx đã ký
+- ✅ `scout`: Freelancer + Remotive (chỉ đọc), lọc bất hợp pháp (bài luận hộ, review giả, spam, cờ bạc, người lớn, KYC/tài khoản) và việc không giao được
+- ✅ Xếp hạng theo lợi nhuận kỳ vọng/giờ (ngân sách × xác suất thắng điều chỉnh theo số bid ÷ giờ công)
+- ✅ `memory.db`: lead, đề xuất, kết quả; tự học tỉ lệ thắng, lợi nhuận/giờ; tự tránh nhóm việc lỗ
+- ✅ Đề xuất tự viết cho top 5 lead mỗi lượt (`output/proposals/`)
+- ✅ `loop` gộp: kill switch → rút lợi nhuận → tìm việc (mỗi 30 vòng) → xử lý inbox
+- ⬜ Chủ đặt `owner.payout_address` trong config.yaml + `owner-seal` (chưa đặt = không rút)
+- ⬜ Chủ gửi đề xuất bằng tài khoản của mình và ghi `outcome` (agent không tự đăng ký/nộp/nhắn khách — xem README)
+- ⏸ Chi tiêu tự do tới địa chỉ khác: không làm (rủi ro prompt injection rút sạch ví)
 
 ## Vòng lặp kiếm tiền
 - ✅ `python3 main.py loop`: xử lý `state/inbox/*.json` → `state/done|refused/`, dừng khi kill switch, chờ khi Dead
@@ -50,7 +63,7 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 
 ## Done (chạy `bash scripts/done_check.sh`, log: `logs/done_evidence.log`)
 - ✅ 1 `python3 -m pytest -q`
-- ✅ 2 `python3 main.py check-controls` (27 luật)
+- ✅ 2 `python3 main.py check-controls` (33 luật)
 - ✅ 3 `python3 main.py simulate` (đi qua đủ 4 trạng thái + chặn hạn mức ngày)
 - ✅ 4 `python3 main.py run --job examples/job_translate.json --wallet mock --offline`
 - ✅ 5 job ngành cấm bị từ chối
@@ -61,6 +74,7 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ✅ 9b `loop --once`: job hợp lệ → done, ngành cấm → refused
 - ✅ 10 sửa control/ trong bản sao → IntegrityError, agent không chạy
 - ✅ 11 `.env` không bị commit, không có private key trong repo
+- ✅ 12 `scout` trên job board thật · 13 `memory` · 14 `payout --dry-run` trên mainnet
 
 ## Ghi chú / giới hạn
 - Phần "Done" của brief không kèm danh sách lệnh, nên bộ 11 kiểm tra trên là định nghĩa của repo này.

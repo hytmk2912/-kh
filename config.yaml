@@ -26,9 +26,17 @@ chains:
     symbol: ETH (Base Sepolia testnet)
     min_confirmations: 1
 
+# Owner payout. The ONLY address the agent may ever send money to.
+# Rule (control/payout.py): wallet >= $1000 -> send $500 here, keep the rest.
+# Empty = payouts disabled. After setting it run: python3 main.py owner-seal
+owner:
+  payout_address: ""
+
 wallet:
+  # The agent creates and holds its own key (state/agent_keystore.json,
+  # encrypted with AGENT_KEYSTORE_PASSWORD from .env) -> `python3 main.py wallet-init`.
   # onchain: read the real balance of WALLET_ADDRESS (.env) on active_chain.
-  #          RECEIVE-ONLY: the agent has no code that signs or sends transactions.
+  #          Outgoing transfers: owner payout only (control/payout.py).
   # mock:    offline JSON wallet in state/ (demo / tests / iPhone)
   backend: onchain
   mock_start_balance_eth: 0.02
@@ -88,3 +96,12 @@ llm:
     groq:       {strong: llama-3.3-70b-versatile,   light: llama-3.1-8b-instant}
     openrouter: {strong: "meta-llama/llama-3.3-70b-instruct:free", light: "mistralai/mistral-7b-instruct:free"}
     offline:    {strong: stub, light: stub}
+
+# Opportunity scout: read-only public job boards, no accounts.
+scout:
+  every_rounds: 30            # run inside `loop` every N rounds (interval 60s -> 30 min)
+  sources: [freelancer, remotive]
+  queries: [translation, translate, proofreading, content writing, article writing, copywriting, blog writing]
+  max_leads_per_source: 40
+  draft_top: 5                # write proposals for the best N new leads
+  max_age_hours: 72

@@ -111,9 +111,18 @@ def test_chain_rpc_pairs_refused(chain_id, rpc):
         network.check_chain(chain_id, rpc)
 
 
-def test_no_signing_code_in_agent():
-    """Receive-only: nothing in agent/ may sign or broadcast a transaction."""
+def test_signing_only_in_signer_behind_authorize():
+    """Only agent/signer.py may sign/broadcast, and it must call control.payout.authorize first."""
     for path in (ROOT / "agent").glob("*.py"):
         src = path.read_text()
-        for needle in ("sign_transaction", "eth_sendRawTransaction", "eth_sendTransaction", "WALLET_PRIVATE_KEY"):
+        for needle in ("sign_transaction", "eth_sendRawTransaction", "eth_sendTransaction", "private_key()"):
+            if path.name == "signer.py" or (path.name == "keystore.py" and needle == "private_key()"):
+                continue
             assert needle not in src, (path.name, needle)
+    src = (ROOT / "agent" / "signer.py").read_text()
+    assert src.index("rules.authorize(") < src.index("Account.sign_transaction(")
+
+
+def test_job_boards_are_read_only():
+    with pytest.raises(network.HostNotAllowed, match="read-only"):
+        network.post_json("https://www.freelancer.com/api/projects/0.1/bids/", {})

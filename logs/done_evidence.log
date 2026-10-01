@@ -1,8 +1,8 @@
-sovereign-agent done-check 2026-10-01T15:50:26Z python=Python 3.11.15
+sovereign-agent done-check 2026-10-01T22:05:46Z python=Python 3.11.15
 ===== [1 unit tests] $ python3 -m pytest -q =====
-........................................................................ [ 98%]
-.                                                                        [100%]
-73 passed in 0.27s
+........................................................................ [ 68%]
+.................................                                        [100%]
+105 passed in 6.85s
 ----- [1 unit tests] exit=0 -----
 
 ===== [2 control layer] $ python3 main.py check-controls =====
@@ -29,16 +29,22 @@ sovereign-agent done-check 2026-10-01T15:50:26Z python=Python 3.11.15
 [PASS] network to Ethereum L1 RPC: blocked: HostNotAllowed: outbound request to 'eth.llamarpc.com' blocked by control.network
 [PASS] chain id paired with wrong RPC: blocked: HostNotAllowed: chain 8453 via 'sepolia.base.org' is not an allowed (chain, RPC) pair
 [PASS] unknown chain id: blocked: HostNotAllowed: chain 1 via 'mainnet.base.org' is not an allowed (chain, RPC) pair
-[PASS] whitelist: gambling: blocked: NotWhitelisted: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'he
+[PASS] payout to a stranger address: blocked: PayoutRefused: destination 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee is not the owner payout address
+[PASS] payout above $500: blocked: PayoutRefused: payout $750.00 exceeds $500
+[PASS] payout below $1000 balance: blocked: PayoutRefused: balance $250.00 < trigger $1000
+[PASS] payout with no owner address set: blocked: PayoutRefused: owner.payout_address not set in config.yaml (owner must set it and run owner-seal)
+[PASS] override payout amount: blocked: ControlTamperError: control.payout.PAYOUT_AMOUNT_USD is read-only (control layer)
+[PASS] POST to job board (auto-apply/sign-up): blocked: HostNotAllowed: www.freelancer.com is read-only (no posting/applying/sign-up)
+[PASS] whitelist: gambling: blocked: NotWhitelisted: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'ge
 [PASS] spend over daily cap: blocked: SpendLimitExceeded: Daily cap reached: spent=2000000000000000 + 1 > limit=2000000000000000 wei
 [PASS] replicate(): blocked: NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner manual approval required)
 [PASS] kill switch engaged (SOVEREIGN_KILL=1): blocked: KillSwitchEngaged: Kill switch engaged (file KILL present or SOVEREIGN_KILL=1). Agent halted.
-CONTROLS PASS (27/27)
+CONTROLS PASS (33/33)
 ----- [2 control layer] exit=0 -----
 
 ===== [3 four states + cap] $ python3 main.py simulate =====
-2026-10-01 15:50:27,217 WARNING sovereign: job sim-2-0.001 refused in Critical: Critical: prepayment of 0.000100 ETH required
-2026-10-01 15:50:27,221 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
+2026-10-01 22:05:54,783 WARNING sovereign: job sim-2-0.001 refused in Critical: Critical: prepayment of 0.000100 ETH required
+2026-10-01 22:05:54,787 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
  balance | payment       | state       | status  | model        | reason
     0.02 | -             | Normal      | done    | stub         | 
    0.005 | -             | Low_compute | done    | stub         | 
@@ -68,12 +74,12 @@ SIMULATION PASS - states seen: ['Critical', 'Dead', 'Low_compute', 'Normal']
 ----- [4 job (mock wallet)] exit=0 -----
 
 ===== [5 whitelist refusal] $ python3 main.py run --job examples/job_forbidden.json --wallet mock --offline =====
-2026-10-01 15:50:27,402 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'health_wellness', 'technology', 'travel']
+2026-10-01 22:05:54,974 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']
 {
   "job_id": "demo-forbidden-001",
   "status": "refused",
   "state": "Normal",
-  "reason": "industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'health_wellness', 'technology', 'travel']",
+  "reason": "industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']",
   "price_wei": 0,
   "paid_wei": 0,
   "cost_wei": 0,
@@ -110,7 +116,7 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "chain": "base_mainnet (chain_id 8453)",
   "real_money": true,
   "wallet_backend": "base_mainnet",
-  "address": "0xeE7d74B9522728CE80d181D71432B01Aa12Ac9fc",
+  "address": "0xFA7235765D768BB61779e2eB0845d8805cD8934c",
   "balance_eth": "0.000000",
   "state": "Dead",
   "policy": {
@@ -127,7 +133,11 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "daily_limit_eth": "0.002000",
   "integrity": "OK",
   "onchain_balance_eth": "0.000000",
-  "virtual_debits_eth": "0.000000"
+  "virtual_debits_eth": "0.000000",
+  "agent_owned_wallet": true,
+  "balance_usd": 0.0,
+  "eth_usd": 2697.6532,
+  "payout_rule": ">= $1000 -> send $500 to NOT SET (payouts disabled)"
 }
 ----- [8a Base MAINNET wallet status] exit=0 -----
 
@@ -136,7 +146,7 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "chain": "base_sepolia (chain_id 84532)",
   "real_money": false,
   "wallet_backend": "base_sepolia",
-  "address": "0xeE7d74B9522728CE80d181D71432B01Aa12Ac9fc",
+  "address": "0xFA7235765D768BB61779e2eB0845d8805cD8934c",
   "balance_eth": "0.000000",
   "state": "Dead",
   "policy": {
@@ -153,7 +163,10 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "daily_limit_eth": "0.002000",
   "integrity": "OK",
   "onchain_balance_eth": "0.000000",
-  "virtual_debits_eth": "0.000000"
+  "virtual_debits_eth": "0.000000",
+  "agent_owned_wallet": true,
+  "balance_usd": "n/a (no ETH/USD feed for chain 84532)",
+  "payout_rule": ">= $1000 -> send $500 to NOT SET (payouts disabled)"
 }
 ----- [8b Base Sepolia wallet status] exit=0 -----
 
@@ -177,6 +190,117 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
 loop consumed inbox: ok -> state/done, forbidden -> state/refused (PASS)
 ----- [9b earning loop (mock)] exit=0 -----
 
+===== [12 scout real job boards] $ python3 main.py scout --offline =====
+{
+  "new_leads": 90,
+  "skipped": {
+    "known": 0,
+    "blocked_or_unfit": 109,
+    "old": 28,
+    "avoid": 0
+  },
+  "drafted": [
+    {
+      "id": "freelancer:40742668",
+      "score": 3.75,
+      "why": "budget $140 x win 0.15 / 5.6h (0 bids, prior)",
+      "title": "Translate Taiwanese Electronics Descriptions",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40742668.md"
+    },
+    {
+      "id": "freelancer:40744974",
+      "score": 3.31,
+      "why": "budget $150 x win 0.13 / 6.0h (2 bids, prior)",
+      "title": "Fourth Circuit Admission Counsel Needed",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40744974.md"
+    },
+    {
+      "id": "freelancer:40744705",
+      "score": 3.12,
+      "why": "budget $500 x win 0.12 / 20.0h (3 bids, prior)",
+      "title": "Bantu Kelola Media Sosial Saya",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40744705.md"
+    },
+    {
+      "id": "freelancer:40739853",
+      "score": 2.96,
+      "why": "budget $60 x win 0.12 / 2.4h (4 bids, prior)",
+      "title": "Somali Poetry Translation to English",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40739853.md"
+    },
+    {
+      "id": "freelancer:40743411",
+      "score": 2.68,
+      "why": "budget $500 x win 0.11 / 20.0h (6 bids, prior)",
+      "title": "English–Afaan Oromo Translation -- 2",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40743411.md"
+    }
+  ]
+}
+----- [12 scout real job boards] exit=0 -----
+
+===== [13 work memory] $ python3 main.py memory --top 5 =====
+{
+  "learned_stats": "no outcomes recorded yet",
+  "top_leads": [
+    {
+      "id": "freelancer:40742668",
+      "status": "proposed",
+      "category": "translate",
+      "score": 3.75,
+      "budget_usd": 140.0,
+      "title": "Translate Taiwanese Electronics Descriptions",
+      "url": "https://www.freelancer.com/projects/traditional-chinese-taiwan/Translate-Taiwanese-Electronics"
+    },
+    {
+      "id": "freelancer:40744974",
+      "status": "proposed",
+      "category": "write",
+      "score": 3.31,
+      "budget_usd": 150.0,
+      "title": "Fourth Circuit Admission Counsel Needed",
+      "url": "https://www.freelancer.com/projects/attorney/Fourth-Circuit-Admission-Counsel-Needed"
+    },
+    {
+      "id": "freelancer:40744705",
+      "status": "proposed",
+      "category": "write",
+      "score": 3.12,
+      "budget_usd": 500.0,
+      "title": "Bantu Kelola Media Sosial Saya",
+      "url": "https://www.freelancer.com/projects/social-media-management/Bantu-Kelola-Media-Sosial-Saya"
+    },
+    {
+      "id": "freelancer:40739853",
+      "status": "proposed",
+      "category": "translate",
+      "score": 2.96,
+      "budget_usd": 60.0,
+      "title": "Somali Poetry Translation to English",
+      "url": "https://www.freelancer.com/projects/poetry/Somali-Poetry-Translation-English"
+    },
+    {
+      "id": "freelancer:40743411",
+      "status": "proposed",
+      "category": "translate",
+      "score": 2.68,
+      "budget_usd": 500.0,
+      "title": "English–Afaan Oromo Translation -- 2",
+      "url": "https://www.freelancer.com/projects/english-translation/English-Afaan-Oromo-Translation"
+    }
+  ]
+}
+----- [13 work memory] exit=0 -----
+
+===== [14 owner payout check (dry run, mainnet)] $ python3 main.py payout --dry-run =====
+{
+  "balance_usd": 0.0,
+  "eth_usd": 2697.6532,
+  "due_usd": 0.0,
+  "action": "none"
+}
+----- [14 owner payout check (dry run, mainnet)] exit=0 -----
+
 ===== [10 tamper detection] $ python3 scripts/extra_checks.py tamper =====
 tampered copy: appended `DAILY_LIMIT_WEI = 10**30` to control/spend_limit.py
 control.integrity.IntegrityError: control layer tampered: control/spend_limit.py: expected 0af12a1d132e got 9c6dbab26f07
@@ -184,7 +308,7 @@ agent refused to run on tampered control layer (PASS)
 ----- [10 tamper detection] exit=0 -----
 
 ===== [11 no secrets committed] $ python3 scripts/extra_checks.py secrets =====
-.env gitignored & untracked; no private-key-like strings in 44 tracked files (PASS)
+.env gitignored & untracked; no private-key-like strings in 52 tracked files (PASS)
 ----- [11 no secrets committed] exit=0 -----
 
 ALL DONE CHECKS PASSED

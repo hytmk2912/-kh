@@ -8,8 +8,9 @@ TX = "0x" + "12" * 32
 
 
 @pytest.fixture
-def wallet(monkeypatch):
-    from control.paths import STATE_DIR
+def wallet(monkeypatch, tmp_path):
+    from agent import keystore
+    monkeypatch.setattr(keystore, "KEYSTORE", tmp_path / "none.json")  # no agent wallet -> use WALLET_ADDRESS
     monkeypatch.setenv("WALLET_ADDRESS", ADDR)
     w = OnchainWallet(load_config("base_mainnet"))
     for p in (w.seen_path, w.debits_path):
@@ -65,7 +66,9 @@ def test_balance_minus_virtual_debits(wallet, monkeypatch):
     assert wallet.balance() == 5 * 10**16 - 10**15
 
 
-def test_bad_address(monkeypatch):
+def test_bad_address(monkeypatch, tmp_path):
+    from agent import keystore
+    monkeypatch.setattr(keystore, "KEYSTORE", tmp_path / "none.json")
     monkeypatch.setenv("WALLET_ADDRESS", "0x123")
     with pytest.raises(WalletError):
         OnchainWallet(load_config("base_mainnet"))
