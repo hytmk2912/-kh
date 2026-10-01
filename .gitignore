@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.key
+# runtime
+state/*
+!state/.gitkeep
+output/*
+!output/.gitkeep
+KILL
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+skills/learned_*

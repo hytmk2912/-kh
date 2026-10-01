@@ -1,0 +1,12 @@
+2026-10-01 15:23:24,338 INFO sovereign: job sim-0-0.02 | balance=0.020000 ETH | state=Normal
+2026-10-01 15:23:24,341 INFO sovereign: job sim-1-0.005 | balance=0.005000 ETH | state=Low_compute
+2026-10-01 15:23:24,343 INFO sovereign: job sim-2-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-01 15:23:24,344 WARNING sovereign: job sim-2-0.001 refused in Critical: Critical: prepayment of 0.000100 ETH required
+2026-10-01 15:23:24,345 INFO sovereign: job sim-3-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-01 15:23:24,347 INFO sovereign: job sim-4-0.0002 | balance=0.000200 ETH | state=Dead
+2026-10-01 15:23:24,349 INFO sovereign: job sim-cap | balance=0.020000 ETH | state=Normal
+2026-10-01 15:23:24,349 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
+2026-10-01 15:23:24,455 INFO sovereign: job demo-translate-001 | balance=0.020000 ETH | state=Normal
+2026-10-01 15:23:24,559 INFO sovereign: job demo-forbidden-001 | balance=0.019950 ETH | state=Normal
+2026-10-01 15:23:24,559 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'health_wellness', 'technology', 'travel']
+2026-10-01 15:23:27,518 INFO sovereign: job demo-write-001 | balance=0.000000 ETH | state=Dead

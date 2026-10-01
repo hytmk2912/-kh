@@ -1,0 +1,8 @@
+{
+  "id": "demo-translate-001",
+  "type": "translate",
+  "industry": "travel",
+  "target_lang": "en",
+  "brief": "Friendly tone for a hostel website.",
+  "source_text": "Chào mừng bạn đến Hội An! Phố cổ đẹp nhất vào buổi tối khi đèn lồng được thắp sáng."
+}

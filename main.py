@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""sovereign-agent CLI.
+
+Agent commands : status | run | simulate | check-controls
+Owner commands : wallet-new | owner-seal
+"""
+import argparse
+import json
+import logging
+import os
+import re
+import sys
+
+from control import free_models, guard, integrity, kill_switch, network, spend_limit, whitelist
+from control.paths import LOGS_DIR, ROOT, STATE_DIR
+from agent import replicate as replicate_mod
+from agent.config import eth_to_wei, load_config, load_env, wei_to_eth
+from agent.core import run_job
+from agent.ledger import Ledger
+from agent.states import policy_for, state_for_balance
+from agent.wallet import MockWallet, make_wallet, new_keypair
+
+
+def setup_logging():
+    LOGS_DIR.mkdir(exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for h in (logging.StreamHandler(sys.stdout), logging.FileHandler(LOGS_DIR / "agent.log", encoding="utf-8")):
+        h.setFormatter(fmt)
+        root.addHandler(h)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+log = logging.getLogger("sovereign")
+
+
+def cmd_status(args, cfg):
+    integrity_problems = integrity.problems()
+    wallet = make_wallet(cfg, args.wallet)
+    bal = wallet.balance()
+    state = state_for_balance(bal, cfg)
+    pol = policy_for(state, cfg)
+    ledger = Ledger.for_wallet(wallet)
+    info = {
+        "chain": f"{cfg['chain']['name']} (chain_id {cfg['chain']['chain_id']})",
+        "wallet_backend": wallet.name,
+        "address": wallet.address,
+        "balance_eth": wei_to_eth(bal),
+        "state": state,
+        "policy": pol.__dict__,
+        "kill_switch": kill_switch.is_engaged(),
+        "spent_today_eth": wei_to_eth(ledger.spent_today()),
+        "daily_limit_eth": wei_to_eth(spend_limit.DAILY_LIMIT_WEI),
+        "integrity": "OK" if not integrity_problems else integrity_problems,
+    }
+    if wallet.name == "base_sepolia":
+        info["onchain_balance_eth"] = wei_to_eth(wallet.onchain_balance())
+        info["virtual_debits_eth"] = wei_to_eth(wallet.virtual_debits())
+    print(json.dumps(info, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_run(args, cfg):
+    with open(args.job, encoding="utf-8") as fh:
+        job = json.load(fh)
+    if args.payment_tx:
+        job["payment_tx"] = args.payment_tx
+    result = run_job(job, cfg, make_wallet(cfg, args.wallet), offline=args.offline)
+    print(json.dumps(result.__dict__, indent=2, ensure_ascii=False))
+    return 0 if result.status in ("done", "refused") else 2
+
+
+def cmd_simulate(args, cfg):
+    """Walk the agent through all 4 states with an offline mock wallet."""
+    sim = STATE_DIR / "sim"
+    for f in ("wallet.json", "ledger.jsonl", "ledger_cap.jsonl"):
+        if (sim / f).exists():
+            (sim / f).unlink()
+    wallet = MockWallet(cfg, path=sim / "wallet.json")
+    ledger = Ledger(sim / "ledger.jsonl")
+    with open(ROOT / "examples/job_translate.json", encoding="utf-8") as fh:
+        base_job = json.load(fh)
+
+    rows = []
+    for i, (eth, pay) in enumerate([(0.02, None), (0.005, None), (0.001, None), (0.001, "0xmock-pay-1"), (0.0002, None)]):
+        wallet.set_balance(eth_to_wei(eth))
+        job = dict(base_job, id=f"sim-{i}-{eth}", payment_tx=pay) if pay else dict(base_job, id=f"sim-{i}-{eth}")
+        r = run_job(job, cfg, wallet, ledger, offline=True)
+        rows.append((eth, pay or "-", r.state, r.status, r.model or "-", r.reason[:70]))
+
+    # Daily cap: pretend today's spend already hit the hard limit.
+    cap_ledger = Ledger(sim / "ledger_cap.jsonl")
+    cap_ledger.record("spend", spend_limit.DAILY_LIMIT_WEI, "sim: cap reached")
+    wallet.set_balance(eth_to_wei(0.02))
+    r = run_job(dict(base_job, id="sim-cap"), cfg, wallet, cap_ledger, offline=True)
+    rows.append((0.02, "cap-hit", r.state, r.status, "-", r.reason[:70]))
+
+    print(f"{'balance':>8} | {'payment':<13} | {'state':<11} | {'status':<7} | {'model':<12} | reason")
+    for row in rows:
+        print(f"{row[0]:>8} | {row[1]:<13} | {row[2]:<11} | {row[3]:<7} | {row[4]:<12} | {row[5]}")
+    states_seen = {row[2] for row in rows}
+    ok = {"Normal", "Low_compute", "Critical", "Dead"} <= states_seen and rows[-1][3] == "refused"
+    print("SIMULATION", "PASS" if ok else "FAIL", "- states seen:", sorted(states_seen))
+    return 0 if ok else 1
+
+
+def cmd_check_controls(args, cfg):
+    checks = []
+
+    def expect(name, fn, exc_types):
+        try:
+            fn()
+        except exc_types as exc:
+            checks.append((True, name, f"blocked: {type(exc).__name__}: {str(exc)[:90]}"))
+            return
+        except Exception as exc:  # wrong exception type
+            checks.append((False, name, f"unexpected {type(exc).__name__}: {exc}"))
+            return
+        checks.append((False, name, "NOT blocked"))
+
+    def allowed(name, fn):
+        try:
+            res = fn()
+            checks.append((True, name, f"allowed: {res}"))
+        except Exception as exc:
+            checks.append((False, name, f"failed: {type(exc).__name__}: {exc}"))
+
+    import control
+
+    checks.append((not integrity.problems(), "integrity manifest matches", integrity.problems() or "OK"))
+    expect("override control.spend_limit.DAILY_LIMIT_WEI", lambda: setattr(spend_limit, "DAILY_LIMIT_WEI", 10**30), PermissionError)
+    expect("replace control.kill_switch.check", lambda: setattr(kill_switch, "check", lambda: None), PermissionError)
+    expect("delete control.whitelist", lambda: delattr(control, "whitelist"), PermissionError)
+    expect("mutate whitelist set", lambda: whitelist.ALLOWED_INDUSTRIES.add("gambling"), AttributeError)
+    expect("agent writes control/kill_switch.py", lambda: guard.write_text(ROOT / "control/kill_switch.py", "x"), PermissionError)
+    expect("agent writes config.yaml", lambda: guard.write_text(ROOT / "config.yaml", "x"), PermissionError)
+    expect("agent writes .env", lambda: guard.write_text(ROOT / ".env", "x"), PermissionError)
+    expect("agent deletes KILL / writes KILL", lambda: guard.write_text(ROOT / "KILL", ""), PermissionError)
+    expect("agent overwrites SOUL.md", lambda: guard.write_text(ROOT / "SOUL.md", "pwned"), PermissionError)
+    expect("agent injects SOUL header marker", lambda: guard.append_soul(integrity.SOUL_HEADER_START), PermissionError)
+    expect("path traversal skills/../config.yaml", lambda: guard.write_text(ROOT / "skills/../config.yaml", "x"), PermissionError)
+    expect("agent overwrites existing skill", lambda: guard.write_text(ROOT / "skills/translate.md", "x"), PermissionError)
+    expect("agent writes executable skill .py", lambda: guard.write_text(ROOT / "skills/evil.py", "x"), PermissionError)
+    probe = ROOT / "skills" / "zz_check_probe.md"
+    if probe.exists():
+        probe.unlink()
+    allowed("agent creates NEW skill skills/zz_check_probe.md", lambda: guard.write_text(probe, "# probe\n").name)
+    probe.unlink(missing_ok=True)
+    expect("paid model openai/gpt-4o", lambda: free_models.check("openrouter", "openai/gpt-4o"), PermissionError)
+    expect("paid model gemini-2.5-pro", lambda: free_models.check("gemini", "gemini-2.5-pro"), PermissionError)
+    allowed("free model groq/llama-3.1-8b-instant", lambda: free_models.check("groq", "llama-3.1-8b-instant") or "ok")
+    expect("network to domain registrar", lambda: network.check_url("https://api.namecheap.com/xml.response"), PermissionError)
+    expect("network to cloud VM API", lambda: network.check_url("https://compute.googleapis.com/compute/v1"), PermissionError)
+    expect("network to mainnet RPC", lambda: network.check_url("https://mainnet.base.org"), PermissionError)
+    expect("whitelist: gambling", lambda: whitelist.check("write", "gambling"), PermissionError)
+    expect("spend over daily cap", lambda: spend_limit.check(spend_limit.DAILY_LIMIT_WEI, 1), RuntimeError)
+    expect("replicate()", replicate_mod.replicate, NotImplementedError)
+
+    def kill_test():
+        os.environ[kill_switch.ENV_VAR] = "1"
+        try:
+            kill_switch.check()
+        finally:
+            os.environ.pop(kill_switch.ENV_VAR, None)
+    expect("kill switch engaged (SOVEREIGN_KILL=1)", kill_test, RuntimeError)
+
+    failed = 0
+    for ok, name, detail in checks:
+        failed += not ok
+        print(f"[{'PASS' if ok else 'FAIL'}] {name}: {detail}")
+    print(f"CONTROLS {'PASS' if not failed else 'FAIL'} ({len(checks) - failed}/{len(checks)})")
+    return 0 if not failed else 1
+
+
+def cmd_wallet_new(args, cfg):
+    """OWNER: create a Base Sepolia testnet key. Key only goes to .env."""
+    address, key = new_keypair()
+    print(f"New TESTNET address (Base Sepolia, chain {cfg['chain']['chain_id']}): {address}")
+    if args.write_env:
+        env = ROOT / ".env"
+        existing = env.read_text() if env.exists() else ""
+        if re.search(r"^WALLET_PRIVATE_KEY=\s*\S", existing, re.M):
+            print("Refusing: .env already has WALLET_PRIVATE_KEY. Remove it first.")
+            return 1
+        lines = [l for l in existing.splitlines() if not l.startswith(("WALLET_ADDRESS=", "WALLET_PRIVATE_KEY="))]
+        lines += [f"WALLET_ADDRESS={address}", f"WALLET_PRIVATE_KEY={key if key.startswith('0x') else '0x' + key}"]
+        env.write_text("\n".join(lines) + "\n")
+        os.chmod(env, 0o600)
+        print("Saved to .env (gitignored, chmod 600). Private key NOT printed.")
+    else:
+        print("Private key not saved. Re-run with --write-env to store it in .env.")
+    print("Fund it from a Base Sepolia faucet manually (owner action).")
+    return 0
+
+
+def cmd_owner_seal(args, cfg):
+    hashes = integrity.seal()
+    for name, digest in hashes.items():
+        print(f"{digest[:16]}  {name}")
+    print(f"Sealed {len(hashes)} entries into control/MANIFEST.sha256")
+    return 0
+
+
+def main(argv=None):
+    load_env()
+    setup_logging()
+    cfg = load_config()
+    p = argparse.ArgumentParser(prog="sovereign-agent")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("status"); s.add_argument("--wallet", choices=["mock", "base_sepolia"])
+    r = sub.add_parser("run")
+    r.add_argument("--job", required=True)
+    r.add_argument("--wallet", choices=["mock", "base_sepolia"])
+    r.add_argument("--payment-tx")
+    r.add_argument("--offline", action="store_true", help="use local stub instead of free LLM APIs")
+    sub.add_parser("simulate")
+    sub.add_parser("check-controls")
+    w = sub.add_parser("wallet-new"); w.add_argument("--write-env", action="store_true")
+    sub.add_parser("owner-seal")
+    args = p.parse_args(argv)
+    handler = {
+        "status": cmd_status, "run": cmd_run, "simulate": cmd_simulate, "check-controls": cmd_check_controls,
+        "wallet-new": cmd_wallet_new, "owner-seal": cmd_owner_seal,
+    }[args.cmd]
+    return handler(args, cfg)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

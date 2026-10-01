@@ -1,0 +1,76 @@
+# sovereign-agent configuration. OWNER-EDITED ONLY.
+# The agent reads this file but cannot write it (control/guard.py) and its hash
+# is sealed in control/MANIFEST.sha256 (re-seal after edits: python main.py owner-seal).
+
+agent:
+  name: sovereign-agent
+  testnet_only: true
+
+chain:
+  name: base_sepolia
+  chain_id: 84532
+  rpc_url: https://sepolia.base.org
+  explorer: https://sepolia.basescan.org
+  symbol: ETH (Base Sepolia testnet)
+
+wallet:
+  # base_sepolia: read real on-chain balance of WALLET_ADDRESS (.env)
+  # mock: offline JSON wallet in state/mock_wallet.json (demo / tests / iPhone)
+  backend: base_sepolia
+  mock_start_balance_eth: 0.02
+
+# Survival states by effective wallet balance (testnet ETH).
+# balance >= normal -> Normal; >= low_compute -> Low_compute;
+# >= critical -> Critical; below critical -> Dead.
+thresholds_eth:
+  normal: 0.01
+  low_compute: 0.003
+  critical: 0.0005
+
+pricing:
+  price_per_1k_chars_eth: 0.0002
+  min_price_eth: 0.0001
+
+# Book-keeping cost charged per LLM call (models are free; this is the agent's
+# internal "metabolism" so the budget logic is exercised). Debited from the
+# wallet: mock -> real debit, base_sepolia -> virtual debit in state/.
+compute_cost_eth:
+  Normal: 0.00005
+  Low_compute: 0.00002
+  Critical: 0.00001
+
+policies:
+  Normal:
+    model_tier: strong
+    max_output_tokens: 2048
+    accept_jobs: true
+    require_prepayment: false
+    may_write_skills: true
+  Low_compute:
+    model_tier: light
+    max_output_tokens: 1024
+    accept_jobs: true
+    require_prepayment: false
+    may_write_skills: false
+  Critical:
+    model_tier: light
+    max_output_tokens: 512
+    accept_jobs: true
+    require_prepayment: true
+    may_write_skills: false
+  Dead:
+    model_tier: none
+    max_output_tokens: 0
+    accept_jobs: false
+    require_prepayment: true
+    may_write_skills: false
+
+llm:
+  # Tried in order; providers without an API key in .env are skipped.
+  # `offline` is a local stub used when no key is configured.
+  provider_order: [gemini, groq, openrouter, offline]
+  models:
+    gemini:     {strong: gemini-2.5-flash,          light: gemini-2.5-flash-lite}
+    groq:       {strong: llama-3.3-70b-versatile,   light: llama-3.1-8b-instant}
+    openrouter: {strong: "meta-llama/llama-3.3-70b-instruct:free", light: "mistralai/mistral-7b-instruct:free"}
+    offline:    {strong: stub, light: stub}
