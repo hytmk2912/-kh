@@ -1,5 +1,7 @@
 # TASKS — sovereign-agent
 
+v1: chỉ testnet. v2 (chủ duyệt): Base mainnet, ví chỉ nhận tiền, vòng lặp nhận việc.
+
 Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của chủ (owner)
 
 ## Lõi
@@ -13,11 +15,20 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ✅ Gemini / Groq / OpenRouter `:free` qua `.env`; fallback stub `offline` khi chưa có key
 - ✅ `control/free_models.py` chặn mọi model ngoài allowlist (kể cả khi config.yaml bị sửa)
 
-## Ví testnet
-- ✅ Base Sepolia (chain 84532), `python main.py wallet-new --write-env` → key chỉ nằm trong `.env` (gitignored, chmod 600)
-- ✅ Từ chối chain id không phải testnet (kiểm tra cả cấu hình lẫn `eth_chainId` từ RPC)
+## Ví (v2: Base mainnet, chủ duyệt)
+- ✅ `active_chain: base_mainnet` (8453) mặc định; `--chain base_sepolia` / `CHAIN=` để chạy testnet
+- ✅ Ví chỉ nhận: không có code ký/gửi tx (có test quét `agent/`), không cần private key khi chạy
+- ✅ Mỗi chain id chỉ đi với đúng RPC (`control.network.check_chain`) + đối chiếu `eth_chainId`
+- ✅ Thanh toán mainnet cần 5 block xác nhận, đúng chain, đúng người nhận, chống dùng lại tx
+- ✅ Đã xác minh thật 1 tx Base mainnet (block 52040181) bằng `verify_payment`
 - ✅ Ví `mock` offline cho demo/test/iPhone
-- ⬜ Nạp ETH testnet vào ví (faucet — chủ tự làm, agent không tạo tài khoản)
+- ⬜ Chủ đặt `WALLET_ADDRESS` của ví mình giữ khoá (không dùng địa chỉ tạo trong container tạm)
+- ⬜ Ví phải có ≥ 0.0005 ETH trên Base thì agent mới thoát Dead
+
+## Vòng lặp kiếm tiền
+- ✅ `python3 main.py loop`: xử lý `state/inbox/*.json` → `state/done|refused/`, dừng khi kill switch, chờ khi Dead
+- ⬜ Kênh nhận job từ khách (form/email/chợ việc) — chủ tự kết nối; agent không tự tạo tài khoản
+- ⬜ API key model free trong `.env` (chưa có → output chỉ là stub)
 
 ## 4 trạng thái (ngưỡng ở config.yaml)
 - ✅ Normal: model mạnh, 2048 token, được viết skill mới
@@ -32,21 +43,22 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ✅ Module đóng băng (gán/xoá thuộc tính → `ControlTamperError`), hằng số kiểu bất biến
 - ✅ `control/guard.py`: agent chỉ ghi được `skills/` (file .md MỚI), `state/`, `logs/`, `output/`, append SOUL
 - ✅ Manifest SHA-256 (`control/MANIFEST.sha256`) cho control/, config.yaml, header SOUL — sai lệch → agent không chạy
-- ✅ Allowlist mạng: chỉ endpoint LLM free + RPC Base Sepolia (không registrar / cloud VM / mainnet)
+- ✅ Allowlist mạng: chỉ endpoint LLM free + RPC Base mainnet/Sepolia (không registrar / cloud VM / chain khác)
 
 ## Tạm tắt
 - ⏸ `agent/replicate.py: replicate()` → `NotImplementedError` ("cần chủ duyệt tay")
 
 ## Done (chạy `bash scripts/done_check.sh`, log: `logs/done_evidence.log`)
 - ✅ 1 `python3 -m pytest -q`
-- ✅ 2 `python3 main.py check-controls`
+- ✅ 2 `python3 main.py check-controls` (27 luật)
 - ✅ 3 `python3 main.py simulate` (đi qua đủ 4 trạng thái + chặn hạn mức ngày)
 - ✅ 4 `python3 main.py run --job examples/job_translate.json --wallet mock --offline`
 - ✅ 5 job ngành cấm bị từ chối
 - ✅ 6 kill switch dừng agent
 - ✅ 7 `replicate()` raise NotImplementedError
-- ✅ 8 `python3 main.py status --wallet base_sepolia` (số dư on-chain thật)
-- ✅ 9 job trên ví testnet thật (số dư 0 → Dead → từ chối, đúng thiết kế)
+- ✅ 8 `status --wallet onchain` trên Base mainnet và Sepolia (số dư on-chain thật)
+- ✅ 9 job trên ví Base mainnet (số dư 0 → Dead → từ chối, đúng thiết kế)
+- ✅ 9b `loop --once`: job hợp lệ → done, ngành cấm → refused
 - ✅ 10 sửa control/ trong bản sao → IntegrityError, agent không chạy
 - ✅ 11 `.env` không bị commit, không có private key trong repo
 

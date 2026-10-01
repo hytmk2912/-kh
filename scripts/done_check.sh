@@ -26,12 +26,14 @@ step "6 kill switch"            python3 scripts/extra_checks.py kill
 step "7 replicate disabled"     python3 scripts/extra_checks.py replicate
 
 if grep -q '^WALLET_ADDRESS=0x' .env 2>/dev/null; then
-  step "8 testnet wallet status" python3 main.py status --wallet base_sepolia
-  step "9 job on real testnet"   python3 main.py run --job examples/job_write.json --wallet base_sepolia --offline
+  step "8a Base MAINNET wallet status" python3 main.py --chain base_mainnet status --wallet onchain
+  step "8b Base Sepolia wallet status" python3 main.py --chain base_sepolia status --wallet onchain
+  step "9 job on Base mainnet wallet"  python3 main.py --chain base_mainnet run --job examples/job_write.json --wallet onchain --offline
 else
   echo "===== [8-9] skipped: no WALLET_ADDRESS in .env (run: python3 main.py wallet-new --write-env) =====" | tee -a "$LOG"
 fi
 
+step "9b earning loop (mock)"   python3 scripts/extra_checks.py loop
 step "10 tamper detection"     python3 scripts/extra_checks.py tamper
 step "11 no secrets committed" python3 scripts/extra_checks.py secrets
 

@@ -34,6 +34,18 @@ def replicate():
     raise AssertionError("replicate() did not raise")
 
 
+def loop():
+    inbox = ROOT / "state" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "examples/job_translate.json", inbox / "loop-ok.json")
+    shutil.copy(ROOT / "examples/job_forbidden.json", inbox / "loop-bad.json")
+    p = run(["main.py", "loop", "--wallet", "mock", "--offline", "--once"])
+    print("\n".join(l for l in p.stdout.splitlines() if "loop" in l or "->" in l))
+    assert (ROOT / "state/done/loop-ok.json").exists() and (ROOT / "state/refused/loop-bad.json").exists()
+    assert not list(inbox.glob("loop-*.json"))
+    print("loop consumed inbox: ok -> state/done, forbidden -> state/refused (PASS)")
+
+
 def tamper():
     with tempfile.TemporaryDirectory() as tmp:
         for name in ("control", "agent", "skills", "examples"):
@@ -63,4 +75,4 @@ def secrets():
 
 
 if __name__ == "__main__":
-    {"kill": kill, "replicate": replicate, "tamper": tamper, "secrets": secrets}[sys.argv[1]]()
+    {"kill": kill, "loop": loop, "replicate": replicate, "tamper": tamper, "secrets": secrets}[sys.argv[1]]()

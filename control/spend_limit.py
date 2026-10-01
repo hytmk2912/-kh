@@ -1,12 +1,13 @@
 """Daily spend cap (control layer 2).
 
 The cap is a hard-coded constant here, NOT in config.yaml, so the agent's
-configuration cannot raise it. Amounts are in wei of the testnet token.
+configuration cannot raise it. Amounts are in wei (mainnet or testnet ETH).
+The agent never sends funds; this caps its internal (virtual) compute spend.
 """
 from control._frozen import freeze
 
 WEI_PER_ETH = 10**18
-# 0.002 testnet ETH per UTC day.
+# 0.002 ETH per UTC day.
 DAILY_LIMIT_WEI = 2 * 10**15
 
 

@@ -4,22 +4,36 @@
 
 agent:
   name: sovereign-agent
-  testnet_only: true
 
-chain:
-  name: base_sepolia
-  chain_id: 84532
-  rpc_url: https://sepolia.base.org
-  explorer: https://sepolia.basescan.org
-  symbol: ETH (Base Sepolia testnet)
+# Chain used by the on-chain wallet. Owner choice; override per run with
+# env CHAIN=base_sepolia or `--chain base_sepolia`.
+# base_mainnet = REAL ETH (owner-approved). Receive-only either way.
+active_chain: base_mainnet
+
+chains:
+  base_mainnet:
+    name: base_mainnet
+    chain_id: 8453
+    rpc_url: https://mainnet.base.org
+    explorer: https://basescan.org
+    symbol: ETH (Base mainnet)
+    min_confirmations: 5        # payment must be this many blocks deep
+  base_sepolia:
+    name: base_sepolia
+    chain_id: 84532
+    rpc_url: https://sepolia.base.org
+    explorer: https://sepolia.basescan.org
+    symbol: ETH (Base Sepolia testnet)
+    min_confirmations: 1
 
 wallet:
-  # base_sepolia: read real on-chain balance of WALLET_ADDRESS (.env)
-  # mock: offline JSON wallet in state/mock_wallet.json (demo / tests / iPhone)
-  backend: base_sepolia
+  # onchain: read the real balance of WALLET_ADDRESS (.env) on active_chain.
+  #          RECEIVE-ONLY: the agent has no code that signs or sends transactions.
+  # mock:    offline JSON wallet in state/ (demo / tests / iPhone)
+  backend: onchain
   mock_start_balance_eth: 0.02
 
-# Survival states by effective wallet balance (testnet ETH).
+# Survival states by effective wallet balance (ETH on the active chain).
 # balance >= normal -> Normal; >= low_compute -> Low_compute;
 # >= critical -> Critical; below critical -> Dead.
 thresholds_eth:
@@ -33,7 +47,7 @@ pricing:
 
 # Book-keeping cost charged per LLM call (models are free; this is the agent's
 # internal "metabolism" so the budget logic is exercised). Debited from the
-# wallet: mock -> real debit, base_sepolia -> virtual debit in state/.
+# wallet: mock -> real debit, onchain -> virtual debit in state/ (never sent).
 compute_cost_eth:
   Normal: 0.00005
   Low_compute: 0.00002

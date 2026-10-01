@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """sovereign-agent CLI.
 
-Agent commands : status | run | simulate | check-controls
+Agent commands : status | run | loop | simulate | check-controls
 Owner commands : wallet-new | owner-seal
 """
 import argparse
@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import sys
+import time
 
 from control import free_models, guard, integrity, kill_switch, network, spend_limit, whitelist
 from control.paths import LOGS_DIR, ROOT, STATE_DIR
@@ -44,6 +45,7 @@ def cmd_status(args, cfg):
     ledger = Ledger.for_wallet(wallet)
     info = {
         "chain": f"{cfg['chain']['name']} (chain_id {cfg['chain']['chain_id']})",
+        "real_money": cfg["chain"]["chain_id"] in network.MAINNET_CHAIN_IDS and wallet.name != "mock",
         "wallet_backend": wallet.name,
         "address": wallet.address,
         "balance_eth": wei_to_eth(bal),
@@ -54,7 +56,7 @@ def cmd_status(args, cfg):
         "daily_limit_eth": wei_to_eth(spend_limit.DAILY_LIMIT_WEI),
         "integrity": "OK" if not integrity_problems else integrity_problems,
     }
-    if wallet.name == "base_sepolia":
+    if wallet.name != "mock":
         info["onchain_balance_eth"] = wei_to_eth(wallet.onchain_balance())
         info["virtual_debits_eth"] = wei_to_eth(wallet.virtual_debits())
     print(json.dumps(info, indent=2, ensure_ascii=False))
@@ -69,6 +71,51 @@ def cmd_run(args, cfg):
     result = run_job(job, cfg, make_wallet(cfg, args.wallet), offline=args.offline)
     print(json.dumps(result.__dict__, indent=2, ensure_ascii=False))
     return 0 if result.status in ("done", "refused") else 2
+
+
+def cmd_loop(args, cfg):
+    """Process every job dropped into state/inbox/, forever (or --once).
+
+    done -> state/done/, refused -> state/refused/, errors stay in the inbox
+    and are retried next round. Stops when the kill switch is engaged; while
+    Dead it keeps polling the balance but does not consume jobs.
+    """
+    inbox, done, refused = (STATE_DIR / d for d in ("inbox", "done", "refused"))
+    for d in (inbox, done, refused):
+        d.mkdir(parents=True, exist_ok=True)
+    wallet = make_wallet(cfg, args.wallet)
+    log.info("loop start | chain=%s wallet=%s address=%s inbox=%s", cfg["chain"]["name"], wallet.name, wallet.address, inbox)
+    rounds = 0
+    while True:
+        rounds += 1
+        if kill_switch.is_engaged():
+            log.warning("kill switch engaged -> loop stops")
+            return 0
+        try:
+            state = state_for_balance(wallet.balance(), cfg)
+        except Exception as exc:
+            log.error("balance check failed: %s", exc)
+            state = None
+        jobs = sorted(inbox.glob("*.json"))
+        if state == "Dead":
+            log.warning("state Dead: %d job(s) waiting, not consuming until balance recovers", len(jobs))
+        elif state:
+            for path in jobs[: args.max_jobs]:
+                try:
+                    job = json.loads(path.read_text(encoding="utf-8"))
+                    result = run_job(job, cfg, wallet, offline=args.offline)
+                except Exception as exc:  # keep job for retry
+                    log.error("job %s failed, will retry: %s: %s", path.name, type(exc).__name__, exc)
+                    continue
+                target = done if result.status == "done" else refused
+                guard.move(path, target / path.name)
+                guard.write_text(target / f"{path.stem}.result.json", json.dumps(result.__dict__, indent=2, ensure_ascii=False))
+                log.info("job %s -> %s (%s)", path.name, result.status, result.reason or result.model)
+                if result.status == "halted":
+                    return 0
+        if args.once or (args.rounds and rounds >= args.rounds):
+            return 0
+        time.sleep(args.interval)
 
 
 def cmd_simulate(args, cfg):
@@ -152,7 +199,9 @@ def cmd_check_controls(args, cfg):
     allowed("free model groq/llama-3.1-8b-instant", lambda: free_models.check("groq", "llama-3.1-8b-instant") or "ok")
     expect("network to domain registrar", lambda: network.check_url("https://api.namecheap.com/xml.response"), PermissionError)
     expect("network to cloud VM API", lambda: network.check_url("https://compute.googleapis.com/compute/v1"), PermissionError)
-    expect("network to mainnet RPC", lambda: network.check_url("https://mainnet.base.org"), PermissionError)
+    expect("network to Ethereum L1 RPC", lambda: network.check_url("https://eth.llamarpc.com"), PermissionError)
+    expect("chain id paired with wrong RPC", lambda: network.check_chain(8453, "https://sepolia.base.org"), PermissionError)
+    expect("unknown chain id", lambda: network.check_chain(1, "https://mainnet.base.org"), PermissionError)
     expect("whitelist: gambling", lambda: whitelist.check("write", "gambling"), PermissionError)
     expect("spend over daily cap", lambda: spend_limit.check(spend_limit.DAILY_LIMIT_WEI, 1), RuntimeError)
     expect("replicate()", replicate_mod.replicate, NotImplementedError)
@@ -174,9 +223,14 @@ def cmd_check_controls(args, cfg):
 
 
 def cmd_wallet_new(args, cfg):
-    """OWNER: create a Base Sepolia testnet key. Key only goes to .env."""
+    """OWNER: create an EVM key (valid on Base mainnet and Sepolia). Key only goes to .env.
+
+    For real money prefer an address from a wallet YOU hold (MetaMask, Coinbase
+    Wallet...): the agent only needs WALLET_ADDRESS, never the private key.
+    """
     address, key = new_keypair()
-    print(f"New TESTNET address (Base Sepolia, chain {cfg['chain']['chain_id']}): {address}")
+    print(f"New EVM address (works on {cfg['chain']['name']}, chain {cfg['chain']['chain_id']}): {address}")
+    print("WARNING: back up the key yourself. If this machine/container is lost, funds sent here are lost.")
     if args.write_env:
         env = ROOT / ".env"
         existing = env.read_text() if env.exists() else ""
@@ -190,7 +244,7 @@ def cmd_wallet_new(args, cfg):
         print("Saved to .env (gitignored, chmod 600). Private key NOT printed.")
     else:
         print("Private key not saved. Re-run with --write-env to store it in .env.")
-    print("Fund it from a Base Sepolia faucet manually (owner action).")
+    print("Testnet: fund from a Base Sepolia faucet. Mainnet: agent only RECEIVES payments here.")
     return 0
 
 
@@ -205,23 +259,31 @@ def cmd_owner_seal(args, cfg):
 def main(argv=None):
     load_env()
     setup_logging()
-    cfg = load_config()
     p = argparse.ArgumentParser(prog="sovereign-agent")
+    p.add_argument("--chain", choices=["base_mainnet", "base_sepolia"], help="override config active_chain")
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("status"); s.add_argument("--wallet", choices=["mock", "base_sepolia"])
+    s = sub.add_parser("status"); s.add_argument("--wallet", choices=["mock", "onchain"])
     r = sub.add_parser("run")
     r.add_argument("--job", required=True)
-    r.add_argument("--wallet", choices=["mock", "base_sepolia"])
+    r.add_argument("--wallet", choices=["mock", "onchain"])
     r.add_argument("--payment-tx")
     r.add_argument("--offline", action="store_true", help="use local stub instead of free LLM APIs")
+    lp = sub.add_parser("loop")
+    lp.add_argument("--wallet", choices=["mock", "onchain"])
+    lp.add_argument("--interval", type=int, default=60, help="seconds between rounds")
+    lp.add_argument("--max-jobs", type=int, default=5, help="jobs per round")
+    lp.add_argument("--rounds", type=int, default=0, help="stop after N rounds (0 = forever)")
+    lp.add_argument("--once", action="store_true")
+    lp.add_argument("--offline", action="store_true")
     sub.add_parser("simulate")
     sub.add_parser("check-controls")
     w = sub.add_parser("wallet-new"); w.add_argument("--write-env", action="store_true")
     sub.add_parser("owner-seal")
     args = p.parse_args(argv)
+    cfg = load_config(args.chain)
     handler = {
         "status": cmd_status, "run": cmd_run, "simulate": cmd_simulate, "check-controls": cmd_check_controls,
-        "wallet-new": cmd_wallet_new, "owner-seal": cmd_owner_seal,
+        "wallet-new": cmd_wallet_new, "loop": cmd_loop, "owner-seal": cmd_owner_seal,
     }[args.cmd]
     return handler(args, cfg)
 

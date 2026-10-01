@@ -18,13 +18,16 @@ def test_state_thresholds(cfg, eth, state):
 
 def test_normal_job_done_and_debits(cfg, mock_env, journal):
     wallet, ledger = mock_env
+    from agent import skills
+    had_skill = skills.exists("learned_translate_travel")
     wallet.set_balance(eth_to_wei(0.02))
     r = run_job(dict(JOB), cfg, wallet, ledger, offline=True)
     assert r.status == "done" and r.state == NORMAL
     assert wallet.balance() == eth_to_wei(0.02) - r.cost_wei
     assert ledger.spent_today() == r.cost_wei
     assert journal[-1][0] == "JOB_DONE"
-    assert r.extra["learned_skill"] == "learned_translate_travel"  # Normal may add a NEW skill
+    # Normal may add a NEW skill (never overwrites one that exists)
+    assert r.extra["learned_skill"] == ("" if had_skill else "learned_translate_travel")
 
 
 def test_low_compute_uses_light_tier_and_fewer_tokens(cfg, mock_env, journal):
@@ -94,4 +97,4 @@ def test_invoice_written(cfg, mock_env, journal):
     wallet.set_balance(eth_to_wei(0.02))
     run_job(dict(JOB, id="t-invoice"), cfg, wallet, ledger, offline=True)
     inv = json.loads((OUTPUT_DIR / "t-invoice.invoice.json").read_text())
-    assert inv["chain_id"] == 84532 and inv["pay_to"] == wallet.address
+    assert inv["chain_id"] == cfg["chain"]["chain_id"] and inv["pay_to"] == wallet.address

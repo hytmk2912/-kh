@@ -29,6 +29,11 @@ def load_env() -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def load_config() -> dict:
+def load_config(chain: str | None = None) -> dict:
     with open(CONFIG_FILE, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+        cfg = yaml.safe_load(fh)
+    name = chain or os.environ.get("CHAIN") or cfg["active_chain"]
+    if name not in cfg["chains"]:
+        raise ValueError(f"unknown chain {name!r}; choose from {sorted(cfg['chains'])}")
+    cfg["chain"] = cfg["chains"][name]
+    return cfg

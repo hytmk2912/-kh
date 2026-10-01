@@ -82,7 +82,7 @@ def test_free_models(prov, model, ok):
 
 
 @pytest.mark.parametrize("url", [
-    "https://api.namecheap.com/x", "https://api.digitalocean.com/v2/droplets", "https://mainnet.base.org",
+    "https://api.namecheap.com/x", "https://api.digitalocean.com/v2/droplets", "https://eth.llamarpc.com",
     "http://sepolia.base.org", "https://api.openai.com/v1/chat/completions",
 ])
 def test_network_blocks(url):
@@ -96,6 +96,24 @@ def test_config_models_are_all_free(cfg):
             assert free_models.is_free(provider, model), (provider, model)
 
 
-def test_testnet_only(cfg):
-    assert cfg["chain"]["chain_id"] in network.TESTNET_CHAIN_IDS
-    network.check_url(cfg["chain"]["rpc_url"])
+def test_configured_chains_allowed(cfg):
+    for chain in cfg["chains"].values():
+        network.check_chain(chain["chain_id"], chain["rpc_url"])
+        network.check_url(chain["rpc_url"])
+
+
+@pytest.mark.parametrize("chain_id,rpc", [
+    (8453, "https://sepolia.base.org"), (84532, "https://mainnet.base.org"),
+    (1, "https://mainnet.base.org"), (8453, "https://evil.example/rpc"),
+])
+def test_chain_rpc_pairs_refused(chain_id, rpc):
+    with pytest.raises(network.HostNotAllowed):
+        network.check_chain(chain_id, rpc)
+
+
+def test_no_signing_code_in_agent():
+    """Receive-only: nothing in agent/ may sign or broadcast a transaction."""
+    for path in (ROOT / "agent").glob("*.py"):
+        src = path.read_text()
+        for needle in ("sign_transaction", "eth_sendRawTransaction", "eth_sendTransaction", "WALLET_PRIVATE_KEY"):
+            assert needle not in src, (path.name, needle)

@@ -1,18 +1,24 @@
-"""Testnet wallets.
+"""Wallets.
 
-BaseSepoliaWallet: reads the real balance of WALLET_ADDRESS on Base Sepolia
-(chain id 84532) via the public JSON-RPC and verifies incoming payments.
-Compute costs are virtual debits stored in state/ (models are free, so no
-real transfer is needed). Refuses to run against any other chain id.
+OnchainWallet: reads the real balance of WALLET_ADDRESS on the active Base
+chain (mainnet 8453 or Sepolia 84532) via the public JSON-RPC and verifies
+incoming payments. RECEIVE-ONLY: there is no signing/sending code, so the
+private key is never needed at runtime. Compute costs are virtual debits in
+state/ (models are free). Chain/RPC pairs outside control.network are refused.
 
 MockWallet: offline JSON wallet, used for demos, tests and iPhone runs.
 """
 import json
 import os
+import re
 
 from control import guard, network
 from control.paths import STATE_DIR
 from agent.config import eth_to_wei
+
+
+ADDRESS_RE = re.compile(r"0x[0-9a-fA-F]{40}")
+TX_RE = re.compile(r"0x[0-9a-fA-F]{64}")
 
 
 class WalletError(RuntimeError):
@@ -61,19 +67,20 @@ class MockWallet:
         return int(min_wei)
 
 
-class BaseSepoliaWallet:
-    name = "base_sepolia"
-
+class OnchainWallet:
     def __init__(self, cfg: dict):
         chain = cfg["chain"]
-        if int(chain["chain_id"]) not in network.TESTNET_CHAIN_IDS:
-            raise WalletError("refusing non-testnet chain")
+        self.chain_id = int(chain["chain_id"])
         self.rpc = chain["rpc_url"]
+        network.check_chain(self.chain_id, self.rpc)
+        self.name = chain["name"]
+        self.mainnet = self.chain_id in network.MAINNET_CHAIN_IDS
+        self.min_confirmations = int(chain.get("min_confirmations", 1))
         self.address = os.environ.get("WALLET_ADDRESS", "").strip()
-        if not self.address:
-            raise WalletError("WALLET_ADDRESS missing in .env (create one: python main.py wallet-new --write-env)")
-        self.debits_path = STATE_DIR / "virtual_debits.json"
-        self.seen_path = STATE_DIR / "seen_payments.json"
+        if not ADDRESS_RE.fullmatch(self.address):
+            raise WalletError("WALLET_ADDRESS missing/invalid in .env (0x + 40 hex chars)")
+        self.debits_path = STATE_DIR / f"virtual_debits_{self.name}.json"
+        self.seen_path = STATE_DIR / f"seen_payments_{self.name}.json"
         self._checked_chain = False
 
     def _rpc(self, method, params):
@@ -82,18 +89,18 @@ class BaseSepoliaWallet:
             raise WalletError(f"RPC error: {out['error']}")
         return out["result"]
 
-    def _ensure_testnet(self):
+    def _ensure_chain(self):
         if not self._checked_chain:
-            chain_id = int(self._rpc("eth_chainId", []), 16)
-            if chain_id not in network.TESTNET_CHAIN_IDS:
-                raise WalletError(f"RPC reports chain {chain_id}, not a whitelisted testnet")
+            reported = int(self._rpc("eth_chainId", []), 16)
+            if reported != self.chain_id:
+                raise WalletError(f"RPC reports chain {reported}, expected {self.chain_id}")
             self._checked_chain = True
 
     def _json(self, path, default):
         return json.loads(path.read_text()) if path.exists() else default
 
     def onchain_balance(self) -> int:
-        self._ensure_testnet()
+        self._ensure_chain()
         return int(self._rpc("eth_getBalance", [self.address, "latest"]), 16)
 
     def virtual_debits(self) -> int:
@@ -106,14 +113,22 @@ class BaseSepoliaWallet:
         guard.write_text(self.debits_path, json.dumps({"wei": self.virtual_debits() + int(amount_wei)}))
 
     def verify_payment(self, tx_hash: str, min_wei: int) -> int:
-        self._ensure_testnet()
+        if not TX_RE.fullmatch(tx_hash or ""):
+            raise WalletError("payment tx hash must be 0x + 64 hex chars")
+        tx_hash = tx_hash.lower()
+        self._ensure_chain()
         seen = self._json(self.seen_path, [])
         if tx_hash in seen:
             raise WalletError("payment already used")
         tx = self._rpc("eth_getTransactionByHash", [tx_hash])
         receipt = self._rpc("eth_getTransactionReceipt", [tx_hash])
         if not tx or not receipt:
-            raise WalletError("transaction not found / not mined on Base Sepolia")
+            raise WalletError(f"transaction not found / not mined on {self.name}")
+        if tx.get("chainId") and int(tx["chainId"], 16) != self.chain_id:
+            raise WalletError("transaction belongs to another chain")
+        depth = int(self._rpc("eth_blockNumber", []), 16) - int(receipt["blockNumber"], 16) + 1
+        if depth < self.min_confirmations:
+            raise WalletError(f"only {depth}/{self.min_confirmations} confirmations; retry later")
         if (tx.get("to") or "").lower() != self.address.lower():
             raise WalletError("payment not sent to agent wallet")
         if int(receipt.get("status", "0x0"), 16) != 1:
@@ -129,13 +144,13 @@ def make_wallet(cfg: dict, backend: str | None = None):
     backend = backend or os.environ.get("WALLET_BACKEND") or cfg["wallet"]["backend"]
     if backend == "mock":
         return MockWallet(cfg)
-    if backend == "base_sepolia":
-        return BaseSepoliaWallet(cfg)
+    if backend == "onchain":
+        return OnchainWallet(cfg)
     raise WalletError(f"unknown wallet backend {backend!r}")
 
 
 def new_keypair() -> tuple[str, str]:
-    """Generate a fresh EVM keypair for TESTNET use (needs eth-account)."""
+    """Generate a fresh EVM keypair (needs eth-account). Same address on every EVM chain."""
     try:
         from eth_account import Account
     except ImportError as exc:  # pragma: no cover

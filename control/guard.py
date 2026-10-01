@@ -63,6 +63,17 @@ def write_text(path, content: str, *, append: bool = False) -> Path:
     return p
 
 
+def move(src, dst) -> Path:
+    """Move a file inside the agent work dirs (state/, logs/, output/) only."""
+    s, d = _resolve(src), _resolve(dst)
+    for p in (s, d):
+        if not any(_inside(p, w) for w in WORK_DIRS):
+            raise WriteDenied(f"move outside work dirs refused: {p.name}")
+    d.parent.mkdir(parents=True, exist_ok=True)
+    s.replace(d)
+    return d
+
+
 def append_soul(entry: str) -> None:
     if SOUL_HEADER_START in entry or SOUL_HEADER_END in entry:
         raise WriteDenied("journal entries may not contain SOUL header markers")
