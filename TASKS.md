@@ -12,7 +12,8 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ✅ Nhật ký vào `SOUL.md` (append-only, header được niêm phong)
 
 ## Model miễn phí
-- ✅ Gemini / Groq / OpenRouter `:free` qua `.env`; fallback stub `offline` khi chưa có key
+- ✅ Gemini / Groq / OpenRouter `:free` qua `.env`; chạy thật KHÔNG BAO GIỜ dùng stub (lỗi hết → giữ job thử lại). Stub chỉ khi `--offline`
+- ✅ Đã chạy thật với key Gemini của chủ: `gemini-flash-latest` (hay quá tải 503) → tự chuyển `gemini-flash-lite-latest`
 - ✅ `control/free_models.py` chặn mọi model ngoài allowlist (kể cả khi config.yaml bị sửa)
 
 ## Ví (v2: Base mainnet, chủ duyệt)

@@ -10,6 +10,7 @@ from control._frozen import freeze
 
 ALLOWED = MappingProxyType({
     "gemini": frozenset({
+        "gemini-flash-latest", "gemini-flash-lite-latest",   # aliases Google keeps on the free tier
         "gemini-2.5-flash", "gemini-2.5-flash-lite",
         "gemini-2.0-flash", "gemini-2.0-flash-lite",
     }),

@@ -92,7 +92,7 @@ llm:
   # `offline` is a local stub used when no key is configured.
   provider_order: [gemini, groq, openrouter, offline]
   models:
-    gemini:     {strong: gemini-2.5-flash,          light: gemini-2.5-flash-lite}
+    gemini:     {strong: gemini-flash-latest,       light: gemini-flash-lite-latest}
     groq:       {strong: llama-3.3-70b-versatile,   light: llama-3.1-8b-instant}
     openrouter: {strong: "meta-llama/llama-3.3-70b-instruct:free", light: "mistralai/mistral-7b-instruct:free"}
     offline:    {strong: stub, light: stub}

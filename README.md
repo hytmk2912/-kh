@@ -43,7 +43,7 @@ Job mẫu: `examples/job_translate.json`, `examples/job_write.json`, `examples/j
 
 | Provider | Biến | Model được phép |
 |---|---|---|
-| Gemini | `GEMINI_API_KEY` | `gemini-2.5-flash(-lite)`, `gemini-2.0-flash(-lite)` — dùng key của project **không bật billing** |
+| Gemini | `GEMINI_API_KEY` | `gemini-flash-latest`, `gemini-flash-lite-latest` (+ 2.5/2.0 flash cho key cũ) — dùng key của project **không bật billing** |
 | Groq | `GROQ_API_KEY` | `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, `gemma2-9b-it` |
 | OpenRouter | `OPENROUTER_API_KEY` | chỉ id kết thúc bằng `:free` |
 | offline | — | stub cục bộ khi không có key |

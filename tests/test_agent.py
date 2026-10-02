@@ -98,3 +98,15 @@ def test_invoice_written(cfg, mock_env, journal):
     run_job(dict(JOB, id="t-invoice"), cfg, wallet, ledger, offline=True)
     inv = json.loads((OUTPUT_DIR / "t-invoice.invoice.json").read_text())
     assert inv["chain_id"] == cfg["chain"]["chain_id"] and inv["pay_to"] == wallet.address
+
+
+def test_real_mode_never_uses_offline_stub(cfg, monkeypatch):
+    from agent import llm
+    for k in llm.KEY_ENV.values():
+        monkeypatch.delenv(k, raising=False)
+    with pytest.raises(llm.LLMError, match="no free LLM API key"):
+        llm.generate(cfg, "x", "strong", 10)
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    monkeypatch.setitem(llm.CALLERS, "gemini", lambda m, p, n: (_ for _ in ()).throw(RuntimeError("down")))
+    with pytest.raises(llm.LLMError, match="all free providers failed"):
+        llm.generate(cfg, "x", "strong", 10)

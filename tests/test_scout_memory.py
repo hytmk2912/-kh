@@ -25,6 +25,9 @@ def mem():
     ("Casino blog posts", "", "", None),
     ("Certified legal translation", "", "", None),             # not deliverable
     ("Build a React app", "Javascript", "", None),
+    ("Archival Research in Berlin", "Research Writing", "", None),
+    ("Fourth Circuit Admission Counsel Needed", "Legal Writing", "", None),
+    ("Freelance Software Sales Partner for SMEs", "Copywriting", "", None),
 ])
 def test_classify(title, tags, text, cat):
     assert scout.classify(title, tags, text) == cat

@@ -44,7 +44,9 @@ BLOCK = re.compile(
 UNFIT = re.compile(
     r"certified|sworn|notari|apostille|photograph|videograph|video edit|on-?site|in[- ]person|"
     r"phone call|voice ?over|investigat|coordinator|manager|mentor|tutor|data entry|social media manag|"
-    r"pdf to word|typing|transcri|design",
+    r"pdf to word|typing|transcri|design|"
+    r"research in|archiv|counsel|attorney|lawyer|admission|sales|partner|recruit|"
+    r"developer|engineer|consultant|assistant|agent\b",
     re.I,
 )
 
