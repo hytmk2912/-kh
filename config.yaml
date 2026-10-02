@@ -30,7 +30,7 @@ chains:
 # Rule (control/payout.py): wallet >= $1000 -> send $500 here, keep the rest.
 # Empty = payouts disabled. After setting it run: python3 main.py owner-seal
 owner:
-  payout_address: ""
+  payout_address: "0xf39d3725b8be130e090b5ab5fd96368319a13b1f"   # owner exchange deposit, network BASE (checked 2026-10-02)
 
 wallet:
   # The agent creates and holds its own key (state/agent_keystore.json,

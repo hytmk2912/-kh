@@ -28,7 +28,7 @@ def test_due(usd, due):
 
 
 def test_owner_address_required():
-    c = load_config("base_mainnet")
+    c = dict(load_config("base_mainnet"), owner={"payout_address": ""})
     with pytest.raises(rules.PayoutRefused, match="not set"):
         rules.owner_address(c)
 
@@ -147,7 +147,7 @@ def test_payout_without_owner_address_refused(agent_wallet, monkeypatch):
     rpc = FakeRPC()
     monkeypatch.setattr(agent_wallet, "_rpc", rpc)
     with pytest.raises(rules.PayoutRefused, match="not set"):
-        signer.maybe_payout(load_config("base_mainnet"), agent_wallet, ledger_tmp())
+        signer.maybe_payout(dict(load_config("base_mainnet"), owner={"payout_address": ""}), agent_wallet, ledger_tmp())
     assert not rpc.sent
 
 
@@ -155,3 +155,7 @@ def test_keystore_is_encrypted(agent_wallet):
     from agent import keystore
     data = json.loads(keystore.KEYSTORE.read_text())
     assert "crypto" in data and "private" not in json.dumps(data).lower()
+
+
+def test_configured_owner_is_valid():
+    assert rules.owner_address(load_config("base_mainnet")).lower() == "0xf39d3725b8be130e090b5ab5fd96368319a13b1f"
