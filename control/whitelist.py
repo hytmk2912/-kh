@@ -1,7 +1,7 @@
 """Industry / job-type whitelist (control layer 3)."""
 from control._frozen import freeze
 
-ALLOWED_JOB_TYPES = frozenset({"write", "translate"})
+ALLOWED_JOB_TYPES = frozenset({"write", "translate", "proofread"})
 
 ALLOWED_INDUSTRIES = frozenset({
     "education",

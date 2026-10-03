@@ -91,10 +91,10 @@ def cmd_loop(args, cfg):
     """Autonomous loop. Each round:
       1. kill switch -> stop
       2. owner payout check ($1000 -> send $500 to owner), on-chain wallets only
-      3. scout the job boards every `scout.every_rounds` rounds (also while Dead:
-         finding work is how the agent gets out of Dead)
+      3. scout the job boards every `scout.every_rounds` rounds
       4. process jobs in state/inbox/ -> state/done/ | state/refused/
-         (errors stay in the inbox and are retried; Dead = do not consume)
+         (errors stay in the inbox and are retried). With 0 capital the
+         state policy allows zero-cost work only, so the loop keeps working.
     """
     inbox, done, refused = (STATE_DIR / d for d in ("inbox", "done", "refused"))
     for d in (inbox, done, refused):
@@ -124,9 +124,7 @@ def cmd_loop(args, cfg):
             log.error("balance check failed: %s", exc)
             state = None
         jobs = sorted(inbox.glob("*.json"))
-        if state == "Dead":
-            log.warning("state Dead: %d job(s) waiting, not consuming until balance recovers", len(jobs))
-        elif state:
+        if state:
             for path in jobs[: args.max_jobs]:
                 try:
                     job = json.loads(path.read_text(encoding="utf-8"))
@@ -176,6 +174,30 @@ def cmd_memory(args, cfg):
     return 0
 
 
+def cmd_accept(args, cfg):
+    """You won a lead: give the client's material, the agent does the work now."""
+    mem = Memory()
+    lead = mem.lead(args.lead)
+    if not lead:
+        print(f"unknown lead {args.lead} (see `python3 main.py memory`)")
+        return 1
+    material = open(args.text_file, encoding="utf-8").read()
+    jtype = lead["category"] if lead["category"] in ("write", "translate", "proofread") else "write"
+    job = {"id": lead["id"].replace(":", "_"), "type": jtype, "industry": "general",
+           "target_lang": args.target_lang, "brief": args.brief or lead["title"]}
+    if jtype == "write":
+        job["brief"] = f"{job['brief']}\n\nClient instructions:\n{material}"
+    else:
+        job["source_text"] = material
+    result = run_job(job, cfg, make_wallet(cfg, args.wallet))
+    if result.status == "done":
+        mem.set_lead(lead["id"], status="in_progress")
+        print(f"Deliverable: {result.output_path}\nReview it, deliver from your account, then run:\n"
+              f"  python3 main.py outcome --lead {lead['id']} --won --revenue-usd <paid> --hours <your review time>")
+    print(json.dumps(result.__dict__, indent=2, ensure_ascii=False))
+    return 0 if result.status == "done" else 1
+
+
 def cmd_outcome(args, cfg):
     """Record what really happened with a lead (feeds the profit memory)."""
     mem = Memory()
@@ -204,7 +226,7 @@ def cmd_simulate(args, cfg):
         base_job = json.load(fh)
 
     rows = []
-    for i, (eth, pay) in enumerate([(0.02, None), (0.005, None), (0.001, None), (0.001, "0xmock-pay-1"), (0.0002, None)]):
+    for i, (eth, pay) in enumerate([(0.02, None), (0.005, None), (0.001, None), (0.001, "0xmock-pay-1"), (0, None)]):
         wallet.set_balance(eth_to_wei(eth))
         job = dict(base_job, id=f"sim-{i}-{eth}", payment_tx=pay) if pay else dict(base_job, id=f"sim-{i}-{eth}")
         r = run_job(job, cfg, wallet, ledger, offline=True)
@@ -366,6 +388,12 @@ def main(argv=None):
     po = sub.add_parser("payout"); po.add_argument("--dry-run", action="store_true")
     sc = sub.add_parser("scout"); sc.add_argument("--offline", action="store_true")
     me = sub.add_parser("memory"); me.add_argument("--top", type=int, default=10)
+    ac = sub.add_parser("accept")
+    ac.add_argument("--lead", required=True)
+    ac.add_argument("--text-file", required=True, help="client's source text / instructions (UTF-8)")
+    ac.add_argument("--target-lang", default="en")
+    ac.add_argument("--brief", default="")
+    ac.add_argument("--wallet", choices=["mock", "onchain"])
     oc = sub.add_parser("outcome")
     oc.add_argument("--lead", required=True)
     g = oc.add_mutually_exclusive_group(required=True)
@@ -383,7 +411,7 @@ def main(argv=None):
         "status": cmd_status, "run": cmd_run, "simulate": cmd_simulate, "check-controls": cmd_check_controls,
         "wallet-new": cmd_wallet_new, "loop": cmd_loop,
         "wallet-init": cmd_wallet_init, "payout": cmd_payout, "scout": cmd_scout, "memory": cmd_memory,
-        "outcome": cmd_outcome, "owner-seal": cmd_owner_seal,
+        "outcome": cmd_outcome, "accept": cmd_accept, "owner-seal": cmd_owner_seal,
     }[args.cmd]
     return handler(args, cfg)
 

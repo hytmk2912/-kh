@@ -39,21 +39,26 @@ def test_low_compute_uses_light_tier_and_fewer_tokens(cfg, mock_env, journal):
     assert r.status == "done" and r.state == LOW and not r.extra["learned_skill"]
 
 
-def test_critical_requires_prepayment(cfg, mock_env, journal):
+def test_critical_zero_capital_mode_works_for_free(cfg, mock_env, journal):
     wallet, ledger = mock_env
     wallet.set_balance(eth_to_wei(0.001))
-    assert run_job(dict(JOB), cfg, wallet, ledger, offline=True).status == "refused"
+    r = run_job(dict(JOB), cfg, wallet, ledger, offline=True)
+    assert r.status == "done" and r.state == CRITICAL and r.cost_wei == 0
+    assert wallet.balance() == eth_to_wei(0.001)                      # nothing spent
     r = run_job(dict(JOB, payment_tx="0xmock-1"), cfg, wallet, ledger, offline=True)
     assert r.status == "done" and r.paid_wei == r.price_wei
-    # replaying the same payment is refused
-    assert run_job(dict(JOB, payment_tx="0xmock-1"), cfg, wallet, ledger, offline=True).status == "refused"
+    assert run_job(dict(JOB, payment_tx="0xmock-1"), cfg, wallet, ledger, offline=True).status == "refused"  # replay
 
 
-def test_dead_refuses(cfg, mock_env, journal):
+def test_zero_capital_still_works_and_spends_nothing(cfg, mock_env, journal):
+    """Owner rule: capital 0 -> keep working, but only on zero-cost work."""
     wallet, ledger = mock_env
     wallet.set_balance(0)
     r = run_job(dict(JOB), cfg, wallet, ledger, offline=True)
-    assert r.status == "refused" and r.state == DEAD and journal[-1][0] == "DEAD"
+    assert r.status == "done" and r.state == DEAD and r.cost_wei == 0
+    assert wallet.balance() == 0 and ledger.spent_today() == 0
+    from agent.states import policy_for
+    assert policy_for(DEAD, cfg).zero_cost_only and not policy_for(NORMAL, cfg).zero_cost_only
 
 
 def test_whitelist_refusal(cfg, mock_env, journal):

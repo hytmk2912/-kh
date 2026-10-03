@@ -59,7 +59,8 @@ pricing:
 compute_cost_eth:
   Normal: 0.00005
   Low_compute: 0.00002
-  Critical: 0.00001
+  Critical: 0          # zero-capital mode never spends
+  Dead: 0
 
 policies:
   Normal:
@@ -74,18 +75,23 @@ policies:
     accept_jobs: true
     require_prepayment: false
     may_write_skills: false
+  # Below these lines the agent has (almost) no capital. Owner rule: with 0
+  # capital it must still work, but only on ZERO-COST work (free LLMs, free
+  # job boards, no ETH spent). Compute cost for these states is 0.
   Critical:
     model_tier: light
-    max_output_tokens: 512
+    max_output_tokens: 1024
     accept_jobs: true
-    require_prepayment: true
+    require_prepayment: false
     may_write_skills: false
-  Dead:
-    model_tier: none
-    max_output_tokens: 0
-    accept_jobs: false
-    require_prepayment: true
+    zero_cost_only: true
+  Dead:          # capital = 0 -> "bootstrap": zero-cost work only
+    model_tier: light
+    max_output_tokens: 1024
+    accept_jobs: true
+    require_prepayment: false
     may_write_skills: false
+    zero_cost_only: true
 
 llm:
   # Tried in order; providers without an API key in .env are skipped.

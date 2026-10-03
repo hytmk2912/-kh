@@ -64,6 +64,23 @@ Mọi model đều qua `control/free_models.check()` — sửa config sang model
 
 Chi phí compute là trừ ảo (`state/virtual_debits_<chain>.json`) vì model free; agent không bao giờ chuyển tiền đi.
 
+## Bắt đầu chạy thật (vốn 0)
+
+Trên một máy luôn bật (PC/laptop để mở, VPS, Codespaces...):
+```bash
+git clone <repo> && cd <repo> && git checkout claude/sovereign-agent-setup-pix2ei
+pip install -r requirements.txt
+cp .env.example .env      # điền GEMINI_API_KEY=... và AGENT_KEYSTORE_PASSWORD=<mật khẩu dài>
+python3 main.py wallet-init          # agent tạo ví của nó; SAO LƯU state/agent_keystore.json + mật khẩu
+python3 main.py status               # kiểm tra: integrity OK, payout_rule có ví của chủ
+python3 main.py loop --interval 60   # chạy mãi (tìm việc mỗi 30 phút)
+```
+Quy trình mỗi ngày của chủ (~15 phút):
+1. Mở `output/proposals/*.md` → đọc, sửa → gửi đề xuất trên Freelancer bằng tài khoản của bạn.
+2. Thắng việc → lưu tài liệu khách vào `client.txt` → `python3 main.py accept --lead freelancer:123 --text-file client.txt --target-lang en`
+   → kiểm tra `output/freelancer_123.md` → giao cho khách.
+3. Có kết quả → `python3 main.py outcome --lead freelancer:123 --won --revenue-usd 30 --hours 0.5` (hoặc `--lost`).
+
 ## Chế độ tự vận hành (v3)
 
 ```bash
@@ -109,8 +126,11 @@ Agent **không tự đi tìm khách**: bạn phải đưa job vào inbox (tự t
 |---|---|---|---|---|---|
 | Normal | ≥ 0.01 | strong | 2048 | có | có |
 | Low_compute | ≥ 0.003 | light | 1024 | có | không |
-| Critical | ≥ 0.0005 | light | 512 | chỉ khi trả trước | không |
-| Dead | < 0.0005 | — | 0 | không, ghi SOUL & chờ chủ | không |
+| Critical | ≥ 0.0005 | light | 1024 | có — **chỉ việc không tốn vốn** (chi phí 0) | không |
+| Dead (vốn 0) | < 0.0005 | light | 1024 | có — **chỉ việc không tốn vốn** (chi phí 0) | không |
+
+Luật của chủ: vốn = 0 vẫn phải đi làm, nhưng chỉ làm việc không tốn vốn (model miễn phí, job board miễn phí,
+không chi ETH). Khi có vốn (≥ 0.003 ETH) mới mở chế độ có tính chi phí compute và được tự viết skill.
 
 ## 3 lớp kiểm soát — `control/` (agent import được, không ghi đè được)
 

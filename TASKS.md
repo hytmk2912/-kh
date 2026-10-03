@@ -39,6 +39,12 @@ Trạng thái: ✅ xong · ⏸ tạm tắt có chủ đích · ⬜ việc của 
 - ⬜ Chủ gửi đề xuất bằng tài khoản của mình và ghi `outcome` (agent không tự đăng ký/nộp/nhắn khách — xem README)
 - ⏸ Chi tiêu tự do tới địa chỉ khác: không làm (rủi ro prompt injection rút sạch ví)
 
+## v4 — vốn 0
+- ✅ Critical/Dead = chế độ không vốn: vẫn nhận việc, chi phí compute = 0, không bao giờ chi ETH
+- ✅ `accept --lead ID --text-file F`: thắng việc → agent làm bài ngay (đã chạy thật: ví mainnet 0 ETH, Gemini, chi phí 0)
+- ✅ Loại việc `proofread` (skill `skills/proofread.md`)
+- ⬜ Chủ: chạy trên máy luôn bật, gửi đề xuất, giao bài, ghi `outcome`
+
 ## Vòng lặp kiếm tiền
 - ✅ `python3 main.py loop`: xử lý `state/inbox/*.json` → `state/done|refused/`, dừng khi kill switch, chờ khi Dead
 - ⬜ Kênh nhận job từ khách (form/email/chợ việc) — chủ tự kết nối; agent không tự tạo tài khoản

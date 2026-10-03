@@ -34,3 +34,28 @@
 2026-10-02 23:33:08,357 INFO sovereign: job loop-bad.json -> refused (industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel'])
 2026-10-02 23:33:08,358 INFO sovereign: job demo-translate-001 | balance=0.019850 ETH | state=Normal
 2026-10-02 23:33:08,361 INFO sovereign: job loop-ok.json -> done (stub)
+2026-10-03 02:27:24,601 INFO sovereign: job sim-0-0.02 | balance=0.020000 ETH | state=Normal
+2026-10-03 02:27:24,605 INFO sovereign: job sim-1-0.005 | balance=0.005000 ETH | state=Low_compute
+2026-10-03 02:27:24,607 INFO sovereign: job sim-2-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-03 02:27:24,610 INFO sovereign: job sim-3-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-03 02:27:24,613 INFO sovereign: job sim-4-0 | balance=0.000000 ETH | state=Dead
+2026-10-03 02:27:24,615 INFO sovereign: job sim-cap | balance=0.020000 ETH | state=Normal
+2026-10-03 02:27:24,616 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
+2026-10-03 02:27:33,382 INFO sovereign: job freelancer_40742112 | balance=0.000000 ETH | state=Dead
+2026-10-03 02:28:02,808 INFO sovereign: job sim-0-0.02 | balance=0.020000 ETH | state=Normal
+2026-10-03 02:28:02,811 INFO sovereign: job sim-1-0.005 | balance=0.005000 ETH | state=Low_compute
+2026-10-03 02:28:02,814 INFO sovereign: job sim-2-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-03 02:28:02,817 INFO sovereign: job sim-3-0.001 | balance=0.001000 ETH | state=Critical
+2026-10-03 02:28:02,820 INFO sovereign: job sim-4-0 | balance=0.000000 ETH | state=Dead
+2026-10-03 02:28:02,823 INFO sovereign: job sim-cap | balance=0.020000 ETH | state=Normal
+2026-10-03 02:28:02,823 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
+2026-10-03 02:28:02,930 INFO sovereign: job demo-translate-001 | balance=0.019800 ETH | state=Normal
+2026-10-03 02:28:03,039 INFO sovereign: job demo-forbidden-001 | balance=0.019750 ETH | state=Normal
+2026-10-03 02:28:03,039 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']
+2026-10-03 02:28:07,654 INFO sovereign: job demo-write-001 | balance=0.000000 ETH | state=Dead
+2026-10-03 02:28:08,208 INFO sovereign: loop start | chain=base_mainnet wallet=mock address=0xMOCK000000000000000000000000000000000000 inbox=/home/user/-kh/state/inbox
+2026-10-03 02:28:08,210 INFO sovereign: job demo-forbidden-001 | balance=0.019750 ETH | state=Normal
+2026-10-03 02:28:08,210 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']
+2026-10-03 02:28:08,212 INFO sovereign: job loop-bad.json -> refused (industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel'])
+2026-10-03 02:28:08,212 INFO sovereign: job demo-translate-001 | balance=0.019750 ETH | state=Normal
+2026-10-03 02:28:08,216 INFO sovereign: job loop-ok.json -> done (stub)

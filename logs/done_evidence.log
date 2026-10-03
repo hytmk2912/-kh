@@ -1,8 +1,8 @@
-sovereign-agent done-check 2026-10-02T23:32:53Z python=Python 3.11.15
+sovereign-agent done-check 2026-10-03T02:27:53Z python=Python 3.11.15
 ===== [1 unit tests] $ python3 -m pytest -q =====
 ........................................................................ [ 65%]
 ......................................                                   [100%]
-110 passed in 8.85s
+110 passed in 8.45s
 ----- [1 unit tests] exit=0 -----
 
 ===== [2 control layer] $ python3 main.py check-controls =====
@@ -43,14 +43,13 @@ CONTROLS PASS (33/33)
 ----- [2 control layer] exit=0 -----
 
 ===== [3 four states + cap] $ python3 main.py simulate =====
-2026-10-02 23:33:03,066 WARNING sovereign: job sim-2-0.001 refused in Critical: Critical: prepayment of 0.000100 ETH required
-2026-10-02 23:33:03,072 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
+2026-10-03 02:28:02,823 WARNING sovereign: job sim-cap refused in Normal: Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=2000000000000000 wei
  balance | payment       | state       | status  | model        | reason
     0.02 | -             | Normal      | done    | stub         | 
    0.005 | -             | Low_compute | done    | stub         | 
-   0.001 | -             | Critical    | refused | -            | Critical: prepayment of 0.000100 ETH required
+   0.001 | -             | Critical    | done    | stub         | 
    0.001 | 0xmock-pay-1  | Critical    | done    | stub         | 
-  0.0002 | -             | Dead        | refused | -            | Dead: balance below critical threshold
+       0 | -             | Dead        | done    | stub         | 
     0.02 | cap-hit       | Normal      | refused | -            | Daily cap reached: spent=2000000000000000 + 50000000000000 > limit=200
 SIMULATION PASS - states seen: ['Critical', 'Dead', 'Low_compute', 'Normal']
 ----- [3 four states + cap] exit=0 -----
@@ -74,7 +73,7 @@ SIMULATION PASS - states seen: ['Critical', 'Dead', 'Low_compute', 'Normal']
 ----- [4 job (mock wallet)] exit=0 -----
 
 ===== [5 whitelist refusal] $ python3 main.py run --job examples/job_forbidden.json --wallet mock --offline =====
-2026-10-02 23:33:03,359 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']
+2026-10-03 02:28:03,039 WARNING sovereign: job demo-forbidden-001 refused in Normal: industry 'gambling' not allowed; allowed=['culture', 'ecommerce', 'education', 'food', 'general', 'health_wellness', 'technology', 'travel']
 {
   "job_id": "demo-forbidden-001",
   "status": "refused",
@@ -121,12 +120,13 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "state": "Dead",
   "policy": {
     "state": "Dead",
-    "model_tier": "none",
-    "max_output_tokens": 0,
-    "accept_jobs": false,
-    "require_prepayment": true,
+    "model_tier": "light",
+    "max_output_tokens": 1024,
+    "accept_jobs": true,
+    "require_prepayment": false,
     "may_write_skills": false,
-    "compute_cost_wei": 0
+    "compute_cost_wei": 0,
+    "zero_cost_only": true
   },
   "kill_switch": false,
   "spent_today_eth": "0.000000",
@@ -136,7 +136,7 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "virtual_debits_eth": "0.000000",
   "agent_owned_wallet": true,
   "balance_usd": 0.0,
-  "eth_usd": 2668.10276656,
+  "eth_usd": 2677.34421647,
   "payout_rule": ">= $1000 -> send $500 to 0xf39d3725b8be130e090b5ab5fd96368319a13b1f"
 }
 ----- [8a Base MAINNET wallet status] exit=0 -----
@@ -151,12 +151,13 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
   "state": "Dead",
   "policy": {
     "state": "Dead",
-    "model_tier": "none",
-    "max_output_tokens": 0,
-    "accept_jobs": false,
-    "require_prepayment": true,
+    "model_tier": "light",
+    "max_output_tokens": 1024,
+    "accept_jobs": true,
+    "require_prepayment": false,
     "may_write_skills": false,
-    "compute_cost_wei": 0
+    "compute_cost_wei": 0,
+    "zero_cost_only": true
   },
   "kill_switch": false,
   "spent_today_eth": "0.000000",
@@ -173,16 +174,18 @@ NotImplementedError: replicate() is disabled - cần chủ duyệt tay (owner ma
 ===== [9 job on Base mainnet wallet] $ python3 main.py --chain base_mainnet run --job examples/job_write.json --wallet onchain --offline =====
 {
   "job_id": "demo-write-001",
-  "status": "refused",
+  "status": "done",
   "state": "Dead",
-  "reason": "Dead: balance below critical threshold",
-  "price_wei": 0,
+  "reason": "",
+  "price_wei": 100000000000000,
   "paid_wei": 0,
   "cost_wei": 0,
-  "provider": "",
-  "model": "",
-  "output_path": "",
-  "extra": {}
+  "provider": "offline",
+  "model": "stub",
+  "output_path": "/home/user/-kh/output/demo-write-001.md",
+  "extra": {
+    "learned_skill": ""
+  }
 }
 ----- [9 job on Base mainnet wallet] exit=0 -----
 
@@ -192,14 +195,36 @@ loop consumed inbox: ok -> state/done, forbidden -> state/refused (PASS)
 
 ===== [12 scout real job boards] $ python3 main.py scout --offline =====
 {
-  "new_leads": 0,
+  "new_leads": 3,
   "skipped": {
-    "known": 234,
-    "blocked_or_unfit": 0,
+    "known": 219,
+    "blocked_or_unfit": 10,
     "old": 0,
     "avoid": 0
   },
-  "drafted": []
+  "drafted": [
+    {
+      "id": "freelancer:40747142",
+      "score": 1.94,
+      "why": "budget $500 x win 0.08 / 20.0h (14 bids, prior)",
+      "title": "Jamu Herbal Drink Guide",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40747142.md"
+    },
+    {
+      "id": "freelancer:40747129",
+      "score": 0.82,
+      "why": "budget $140 x win 0.03 / 5.6h (54 bids, prior)",
+      "title": "ERP Product Branding & Content Setup",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40747129.md"
+    },
+    {
+      "id": "freelancer:40747111",
+      "score": 0.44,
+      "why": "budget $60 x win 0.02 / 3.0h (88 bids, prior)",
+      "title": "TikTok Launch with Client Webpage -- 2",
+      "proposal": "/home/user/-kh/output/proposals/freelancer_40747111.md"
+    }
+  ]
 }
 ----- [12 scout real job boards] exit=0 -----
 
@@ -236,7 +261,7 @@ loop consumed inbox: ok -> state/done, forbidden -> state/refused (PASS)
     },
     {
       "id": "freelancer:40742112",
-      "status": "proposed",
+      "status": "in_progress",
       "category": "proofread",
       "score": 2.25,
       "budget_usd": 31.21,
@@ -259,7 +284,7 @@ loop consumed inbox: ok -> state/done, forbidden -> state/refused (PASS)
 ===== [14 owner payout check (dry run, mainnet)] $ python3 main.py payout --dry-run =====
 {
   "balance_usd": 0.0,
-  "eth_usd": 2668.10276656,
+  "eth_usd": 2677.34421647,
   "due_usd": 0.0,
   "action": "none"
 }
@@ -272,7 +297,7 @@ agent refused to run on tampered control layer (PASS)
 ----- [10 tamper detection] exit=0 -----
 
 ===== [11 no secrets committed] $ python3 scripts/extra_checks.py secrets =====
-.env gitignored & untracked; no private-key-like strings in 53 tracked files (PASS)
+.env gitignored & untracked; no private-key-like strings in 54 tracked files (PASS)
 ----- [11 no secrets committed] exit=0 -----
 
 ALL DONE CHECKS PASSED

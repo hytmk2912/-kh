@@ -16,6 +16,7 @@ class Policy:
     require_prepayment: bool
     may_write_skills: bool
     compute_cost_wei: int
+    zero_cost_only: bool = False
 
 
 def state_for_balance(balance_wei: int, cfg: dict) -> str:
@@ -39,5 +40,6 @@ def policy_for(state: str, cfg: dict) -> Policy:
         accept_jobs=bool(p["accept_jobs"]),
         require_prepayment=bool(p["require_prepayment"]),
         may_write_skills=bool(p["may_write_skills"]),
-        compute_cost_wei=eth_to_wei(cost),
+        compute_cost_wei=0 if p.get("zero_cost_only") else eth_to_wei(cost),
+        zero_cost_only=bool(p.get("zero_cost_only", False)),
     )

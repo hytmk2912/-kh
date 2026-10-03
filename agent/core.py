@@ -8,11 +8,11 @@ from control.paths import OUTPUT_DIR
 from agent import llm, skills, soul
 from agent.config import eth_to_wei, wei_to_eth
 from agent.ledger import Ledger
-from agent.states import DEAD, policy_for, state_for_balance
+from agent.states import policy_for, state_for_balance
 
 log = logging.getLogger("sovereign")
 
-SKILL_FOR_TYPE = {"write": "write_content", "translate": "translate"}
+SKILL_FOR_TYPE = {"write": "write_content", "translate": "translate", "proofread": "proofread"}
 
 
 @dataclass
@@ -88,9 +88,11 @@ def run_job(job: dict, cfg: dict, wallet, ledger: Ledger | None = None, offline:
     policy = policy_for(state, cfg)
     log.info("job %s | balance=%s ETH | state=%s", job_id, wei_to_eth(balance), state)
 
-    if state == DEAD or not policy.accept_jobs:
-        soul.log("DEAD", job=job_id, balance_eth=wei_to_eth(balance), note="stopped accepting work; waiting for owner")
-        return JobResult(job_id=job_id, status="refused", state=state, reason="Dead: balance below critical threshold")
+    if not policy.accept_jobs:
+        soul.log("NO_WORK", job=job_id, state=state, balance_eth=wei_to_eth(balance))
+        return JobResult(job_id=job_id, status="refused", state=state, reason=f"{state}: policy accepts no jobs")
+    if policy.zero_cost_only and policy.compute_cost_wei:
+        raise RuntimeError("zero_cost_only policy with non-zero compute cost")  # config error, never spend
 
     try:
         whitelist.check(job.get("type", ""), job.get("industry", ""))
